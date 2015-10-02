@@ -383,6 +383,10 @@ let mk_dlambda f =
   "-dlambda", Arg.Unit f, " (undocumented)"
 ;;
 
+let mk_dcps f =
+  "-dcps", Arg.Unit f, " (undocumented)"
+;;
+
 let mk_dclambda f =
   "-dclambda", Arg.Unit f, " (undocumented)"
 ;;
@@ -497,6 +501,7 @@ module type Common_options = sig
   val _dtypedtree : unit -> unit
   val _drawlambda : unit -> unit
   val _dlambda : unit -> unit
+  val _dcps : unit -> unit
 
   val anonymous : string -> unit
 end;;
@@ -701,6 +706,7 @@ struct
     mk_dtypedtree F._dtypedtree;
     mk_drawlambda F._drawlambda;
     mk_dlambda F._dlambda;
+    mk_dcps F._dcps;
     mk_dinstr F._dinstr;
   ]
 end;;
@@ -743,6 +749,7 @@ struct
     mk_dtypedtree F._dtypedtree;
     mk_drawlambda F._drawlambda;
     mk_dlambda F._dlambda;
+    mk_dcps F._dcps;
     mk_dinstr F._dinstr;
   ]
 end;;
@@ -815,6 +822,7 @@ struct
     mk_dtypedtree F._dtypedtree;
     mk_drawlambda F._drawlambda;
     mk_dlambda F._dlambda;
+    mk_dcps F._dcps;
     mk_dclambda F._dclambda;
     mk_dcmm F._dcmm;
     mk_dsel F._dsel;

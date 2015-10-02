@@ -104,6 +104,7 @@ module Options = Main_args.Make_bytecomp_options (struct
   let _dtypedtree = option "-dtypedtree"
   let _drawlambda = option "-drawlambda"
   let _dlambda = option "-dlambda"
+  let _dcps = option "-dcps"
   let _dinstr = option "-dinstr"
   let anonymous = process_file
 end);;

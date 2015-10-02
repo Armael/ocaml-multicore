@@ -85,6 +85,7 @@ let implementation ppf sourcefile outputprefix =
       ++ Translmod.transl_store_implementation modulename
       +++ print_if ppf Clflags.dump_rawlambda Printlambda.lambda
       +++ Simplif.simplify_lambda
+      ++ (fun lam -> if !Clflags.cps then Cps.cps lam else lam)
       +++ print_if ppf Clflags.dump_lambda Printlambda.lambda
       ++ Asmgen.compile_implementation outputprefix ppf;
       Compilenv.save_unit_info cmxfile;

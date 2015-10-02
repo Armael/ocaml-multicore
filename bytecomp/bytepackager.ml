@@ -191,6 +191,7 @@ let build_global_target oc target_name members mapping pos coercion =
   let lam =
     Translmod.transl_package
       components (Ident.create_persistent target_name) coercion in
+  let lam = if !Clflags.cps then Cps.toplevel_cps lam else lam in
   if !Clflags.dump_lambda then
     Format.printf "%a@." Printlambda.lambda lam;
   let instrs =

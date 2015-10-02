@@ -67,6 +67,7 @@ let dump_parsetree = ref false          (* -dparsetree *)
 and dump_typedtree = ref false          (* -dtypedtree *)
 and dump_rawlambda = ref false          (* -drawlambda *)
 and dump_lambda = ref false             (* -dlambda *)
+and cps = ref false                     (* -dcps *)
 and dump_clambda = ref false            (* -dclambda *)
 and dump_instr = ref false              (* -dinstr *)
 

@@ -89,6 +89,7 @@ let implementation ppf sourcefile outputprefix =
       ++ Translmod.transl_implementation modulename
       ++ print_if ppf Clflags.dump_rawlambda Printlambda.lambda
       ++ Simplif.simplify_lambda
+      ++ (fun lam -> if !Clflags.cps then Cps.toplevel_cps lam else lam)
       ++ print_if ppf Clflags.dump_lambda Printlambda.lambda
       ++ Bytegen.compile_implementation modulename
       ++ print_if ppf Clflags.dump_instr Printinstr.instrlist
