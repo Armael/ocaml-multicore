@@ -1,5 +1,12 @@
 open Lambda
 
+let is_atom tm =
+  match tm with
+  | Lvar _ | Lconst _ | Lprim (_, []) ->
+      true
+  | _ ->
+      false
+
 let rec cps tm =
   match tm with
   | Lvar _ ->
@@ -19,9 +26,7 @@ let rec cps tm =
   | Lapply (f, args, info) ->
       let k = Ident.create "k" in
       let fv = Ident.create "f" in
-      let f_cps = cps f in
       let args_idents = List.map (fun _ -> Ident.create "v") args in
-      let args_cps = List.map cps args in
       let final_apply = Lapply (Lvar fv,
                                 List.map (fun i -> Lvar i) (args_idents @ [k]),
                                 info) in
@@ -30,7 +35,7 @@ let rec cps tm =
         params = [k];
         body = cps_apply_body
             final_apply
-            (List.combine (fv :: args_idents) (f_cps :: args_cps));
+            (List.combine (fv :: args_idents) (f :: args));
       }
   | Lfunction { kind; params; body } ->
       (* How do we handle kind = Tupled ? *)
@@ -54,7 +59,6 @@ let rec cps tm =
   | Lprim (prim, args) ->
       let k = Ident.create "k" in
       let args_idents = List.map (fun _ -> Ident.create "v") args in
-      let args_cps = List.map cps args in
       let final_apply =
         Lapply (Lvar k,
                 [Lprim (prim, List.map (fun i -> Lvar i) args_idents)],
@@ -62,37 +66,40 @@ let rec cps tm =
       Lfunction {
         kind = Curried;
         params = [k];
-        body = cps_apply_body final_apply (List.combine args_idents args_cps)
+        body = cps_apply_body final_apply (List.combine args_idents args)
       }
   | Lsequence (e1, e2) ->
       let dummy = Ident.create "_" in
       cps_let dummy e1 e2
   | _ -> failwith "not handled" 
 
-and cps_apply_body final_apply args_cps =
-  List.fold_left (fun acc (v, arg_cps) ->
-    Lapply (arg_cps,
-            [Lfunction { kind = Curried;
-                         params = [v];
-                         body = acc }],
-            no_apply_info)
-  ) final_apply args_cps
+and cps_apply_body final_apply args =
+  List.fold_left (fun acc (v, arg) ->
+    lambda_apply arg v acc
+  ) final_apply args
   
 and cps_let ident e1 e2 =
   let k = Ident.create "k" in
   Lfunction {
     kind = Curried;
     params = [k];
-    body =
-      Lapply (cps e1,
-              [Lfunction {
-                 kind = Curried;
-                 params = [ident];
-                 body = Lapply (cps e2, [Lvar k], no_apply_info)
-               }],
-              no_apply_info)
+    body = lambda_apply e1 ident (Lapply (cps e2, [Lvar k], no_apply_info));
   }
 
+and lambda_apply e x body_cps =
+  if is_atom e then (
+    subst_lambda (Ident.add x e Ident.empty) body_cps
+  ) else (
+    Lapply (
+      cps e,
+      [Lfunction {
+         kind = Curried;
+         params = [x];
+         body = body_cps;
+       }],
+      no_apply_info
+    )
+  )
 
 let toplevel_cps tm =
   let x = Ident.create "x" in
