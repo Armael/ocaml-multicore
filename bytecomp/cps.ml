@@ -56,6 +56,29 @@ let rec cps tm =
       ) params (cps body)
   | Llet (kind, ident, e1, e2) ->
       cps_let ident e1 e2
+  | Lletrec (decl, body) ->
+      (* works because identifiers cannot clash (otherwise, the continuation
+         [k] could accidentaly capture variables bound by [decl]) *)
+      let k = Ident.create "k" in
+      let decl_cps = List.map (fun (i, t) ->
+        (i, Ident.create ("x" ^ i.Ident.name), cps t)) decl in
+      let body =
+        List.fold_right (fun (i, xi, cps_t) acc ->
+          Lapply (Lvar xi,
+                  [Lfunction { kind = Curried; params = [i]; body = acc }],
+                  no_apply_info)
+        ) decl_cps (Lapply (cps body, [Lvar k], no_apply_info)) in
+
+      Lfunction {
+        kind = Curried;
+        params = [k];
+        body =
+          Lletrec (
+            List.map (fun (_, xi, t) -> (xi, t)) decl_cps,
+            body
+          )
+      }
+
   | Lprim (prim, args) ->
       let k = Ident.create "k" in
       let args_idents = List.map (fun _ -> Ident.create "v") args in
