@@ -12,9 +12,11 @@ module C : sig
 
   val create_cont_ident : string -> cont_ident
   val std : cont_ident -> Ident.t
+  val err : cont_ident -> Ident.t
 
   val mkcont :
     ?std:(Ident.t * lambda) ->
+    ?err:(Ident.t * lambda) ->
     cont_ident ->
     cont
 
@@ -25,7 +27,7 @@ module C : sig
 
 end = struct
   type lambda_cps = lambda
-  type cont_ident = Ident.t
+  type cont_ident = Ident.t * Ident.t
   type k =
     | Id of Ident.t
     | Lambda of Ident.t * lambda
@@ -35,31 +37,35 @@ end = struct
     | Lambda (i, t) ->
         Lfunction { kind = Curried; params = [i]; body = t }
 
-  type cont = k
+  type cont = k * k
 
   let create_cont_ident name =
-    Ident.create (name ^ "k")
+    (Ident.create (name ^ "k")),
+    (Ident.create (name ^ "ke"))
 
-  let std k =
+  let std (k, ke) =
     k
 
-  let mkcont ?std k =
+  let err (k, ke) =
+    ke
+
+  let mkcont ?std ?err (k, ke) =
     let mkk o k = match o with
       | None -> Id k
       | Some (id, t) -> Lambda (id, t) in
-    mkk std k
+    (mkk std k, mkk err ke)
 
-  let abs_cont k t =
+  let abs_cont (k, ke) t =
     Lfunction {
       kind = Curried;
-      params = [k];
+      params = [k; ke];
       body = t;
     }
 
-  let continue_with c = function
+  let continue_with (c, ce) = function
     | Lfunction {
       kind;
-      params = [k];
+      params = [k; ke];
       body = Lapply (Lvar k', [atom], _)
     } when k = k' && is_atom atom ->
         begin match c with
@@ -69,9 +75,9 @@ end = struct
             subst_lambda (Ident.add v atom Ident.empty) vcont
         end
     | Lapply (f, args, info) ->
-        Lapply (f, args @ [lambda_of_k c], info)
+        Lapply (f, args @ [lambda_of_k c; lambda_of_k ce], info)
     | t ->
-        Lapply (t, [lambda_of_k c], no_apply_info)
+        Lapply (t, [lambda_of_k c; lambda_of_k ce], no_apply_info)
 
   let assert_cps t =
     t
@@ -188,11 +194,12 @@ let cps tm =
   ((cps tm) :> lambda)
 
 let toplevel_cps tm =
+  (* TODO: proper uncaught exception handler *)
   let x = Ident.create "x" in
   let identity = Lfunction { kind = Curried; params = [x]; body = Lvar x } in
 
   Lapply (
     (cps tm :> lambda),
-    [identity],
+    [identity; identity],
     no_apply_info
   )
