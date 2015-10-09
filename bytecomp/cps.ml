@@ -10,13 +10,17 @@ module C : sig
   type cont_ident
   type cont
 
+  type k =
+    | Cid of Ident.t
+    | Clambda of Ident.t * lambda
+
   val create_cont_ident : string -> cont_ident
   val std : cont_ident -> Ident.t
   val err : cont_ident -> Ident.t
 
   val mkcont :
-    ?std:(Ident.t * lambda) ->
-    ?err:(Ident.t * lambda) ->
+    ?std:k ->
+    ?err:k ->
     cont_ident ->
     cont
 
@@ -29,12 +33,12 @@ end = struct
   type lambda_cps = lambda
   type cont_ident = Ident.t * Ident.t
   type k =
-    | Id of Ident.t
-    | Lambda of Ident.t * lambda
+    | Cid of Ident.t
+    | Clambda of Ident.t * lambda
 
   let lambda_of_k = function
-    | Id k -> Lvar k
-    | Lambda (i, t) ->
+    | Cid k -> Lvar k
+    | Clambda (i, t) ->
         Lfunction { kind = Curried; params = [i]; body = t }
 
   type cont = k * k
@@ -51,8 +55,8 @@ end = struct
 
   let mkcont ?std ?err (k, ke) =
     let mkk o k = match o with
-      | None -> Id k
-      | Some (id, t) -> Lambda (id, t) in
+      | None -> Cid k
+      | Some k -> k in
     (mkk std k, mkk err ke)
 
   let abs_cont (k, ke) t =
@@ -69,9 +73,9 @@ end = struct
       body = Lapply (Lvar k', [atom], _)
     } when k = k' && is_atom atom ->
         begin match c with
-        | Id k ->
+        | Cid k ->
             Lapply (Lvar k, [atom], no_apply_info)
-        | Lambda (v, vcont) ->
+        | Clambda (v, vcont) ->
             subst_lambda (Ident.add v atom Ident.empty) vcont
         end
     | Lapply (f, args, info) ->
@@ -93,7 +97,7 @@ let rec cps_eval_chain
   =
   List.fold_right (fun (id, tm) acc ->
     continue_with
-      (mkcont ~std:(id, acc) default_cont)
+      (mkcont ~std:(Clambda (id, acc)) default_cont)
       tm
   ) id_tms body
 
