@@ -1,8 +1,9 @@
 open Lambda
 
-let is_atom tm =
+let rec is_atom tm =
   match tm with
-  | Lvar _ | Lconst _ | Lprim (_, []) -> true
+  | Lvar _ | Lconst _ -> true
+  | Lprim (_, args) -> List.for_all is_atom args
   | _ -> false
 
 module C : sig
