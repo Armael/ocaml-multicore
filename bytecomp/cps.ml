@@ -166,6 +166,13 @@ and cps (tm: lambda): lambda_cps =
               (continue_with (mkcont k) (cps body)))
          ))
 
+  | Lprim (Praise _ (* ? *), [e]) ->
+      let k = create_cont_ident "" in
+      abs_cont k
+        (continue_with
+           (mkcont ~std:(Cid (err k)) k)
+           (cps e))
+
   | Lprim (prim, args) ->
       let k = create_cont_ident "" in
       let args_cps = List.map cps args in
@@ -180,6 +187,15 @@ and cps (tm: lambda): lambda_cps =
         (cps_eval_chain k
            (List.combine args_idents args_cps)
            final_apply)
+
+  | Ltrywith (body, exn, handle) ->
+      let k = create_cont_ident "" in
+      abs_cont k
+        (continue_with
+           (mkcont
+              ~err:(Clambda (exn, continue_with (mkcont k) (cps handle)))
+              k)
+           (cps body))
 
   | _ -> failwith "not handled"
 
