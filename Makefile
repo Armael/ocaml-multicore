@@ -127,6 +127,7 @@ all:
 	$(MAKE) runtime
 	$(MAKE) coreall
 	$(MAKE) ocaml
+	$(MAKE) ocamlcps
 	$(MAKE) otherlibraries $(OCAMLBUILDBYTE) $(WITH_DEBUGGER) \
 	  $(WITH_OCAMLDOC)
 
@@ -315,6 +316,7 @@ install:
 	  dllunix.so dllgraphics.so dllstr.so
 	cd byterun; $(MAKE) install
 	cp ocamlc $(INSTALL_BINDIR)/ocamlc$(EXE)
+	cp ocamlcps $(INSTALL_BINDIR)/ocamlcps$(EXE)
 	cp ocaml $(INSTALL_BINDIR)/ocaml$(EXE)
 	cd stdlib; $(MAKE) install
 	cp lex/ocamllex $(INSTALL_BINDIR)/ocamllex$(EXE)
@@ -394,6 +396,10 @@ partialclean::
 ocamlc: compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma $(BYTESTART)
 	$(CAMLC) $(LINKFLAGS) -compat-32 -o ocamlc \
 	   compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma $(BYTESTART)
+
+ocamlcps: compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma driver/ocamlcps.cmo
+	$(CAMLC) $(LINKFLAGS) -compat-32 -o ocamlcps \
+	   compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma driver/ocamlcps.cmo
 
 # The native-code compiler
 
