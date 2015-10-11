@@ -317,7 +317,25 @@ and cps (tm: lambda): lambda_cps =
            (mkcont ~std:(Clambda (tv, body)) k)
            (cps t))
 
-  | _ -> failwith "not handled"
+  | Lstringswitch (t, clauses, failaction) ->
+      let k = create_cont_ident "" in
+      let tv = Ident.create "v" in
+      let cps_case (s, t) = s, (cps t : lambda_cps :> lambda) in
+      let failaction = match failaction with
+        | Some t -> Some (cps t : lambda_cps :> lambda)
+        | None -> None in
+      let body = continue_with (mkcont k)
+          (Lstringswitch (Lvar tv,
+                          List.map cps_case clauses,
+                          failaction)
+           |> assert_cps)
+      in
+      abs_cont k
+        (continue_with
+           (mkcont ~std:(Clambda (tv, body)) k)
+           (cps t))
+
+  | _ -> failwith "unhandled"
 
 (* let toplevel_cps tm = *)
 (*   let x = Ident.create "x" in *)
