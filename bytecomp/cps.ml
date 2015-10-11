@@ -287,6 +287,37 @@ and cps (tm: lambda): lambda_cps =
            (mkcont ~std:(Clambda (condv, body)) k)
            (cps cond))
 
+  | Lswitch (t, { sw_numconsts;
+                  sw_consts;
+                  sw_numblocks;
+                  sw_blocks;
+                  sw_failaction }) ->
+      (*
+         ⟦switch a case c₁ -> b₁ | … | cn -> bn⟧
+         =
+         λk ke. ⟦a⟧ (λva. (switch va case c₁ -> ⟦b₁⟧ | … | cn -> ⟦bn⟧) k ke) ke
+      *)
+      let k = create_cont_ident "" in
+      let tv = Ident.create "v" in
+      let cps_case (i, t) = i, (cps t : lambda_cps :> lambda) in
+      let sw_consts = List.map cps_case sw_consts in
+      let sw_blocks = List.map cps_case sw_blocks in
+      let sw_failaction = match sw_failaction with
+        | Some t -> Some (cps t : lambda_cps :> lambda)
+        | None -> None in
+      let body = continue_with (mkcont k)
+          (Lswitch (Lvar tv, { sw_numconsts;
+                               sw_consts;
+                               sw_numblocks;
+                               sw_blocks;
+                               sw_failaction })
+           |> assert_cps)
+      in
+      abs_cont k
+        (continue_with
+           (mkcont ~std:(Clambda (tv, body)) k)
+           (cps t))
+
   | _ -> failwith "not handled"
 
 (* let toplevel_cps tm = *)
