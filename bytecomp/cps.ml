@@ -113,10 +113,16 @@ let rec cps_eval_chain
 and cps (tm: lambda): lambda_cps =
   match tm with
   | _ when is_atom tm ->
+      (*
+         ⟦a⟧ = λk ke. k a
+      *)
       let k = create_cont_ident "" in
       abs_cont k (Lapply (Lvar (std k), [tm], no_apply_info))
 
   | Lapply (f, args, info) ->
+      (*
+         ⟦a b⟧ = λk ke. ⟦a⟧ (λva. ⟦b⟧ (λvb. va vb k ke) ke) ke
+      *)
       let k = create_cont_ident "" in
       let fv = Ident.create "f" in
       let args_cps = List.map cps args in
@@ -135,6 +141,9 @@ and cps (tm: lambda): lambda_cps =
            final_apply)
 
   | Lfunction { kind; params; body } ->
+      (*
+         ⟦λx.a⟧ = λk ke. k (λx. ⟦a⟧)
+      *)
       (* How do we handle kind = Tupled ? *)
       List.fold_right (fun v (acc: lambda_cps) ->
         let k = create_cont_ident "" in
@@ -149,6 +158,9 @@ and cps (tm: lambda): lambda_cps =
       ) params (cps body)
 
   | Llet (kind, ident, e1, e2) ->
+      (*
+         ⟦let x = a in b⟧ = λk ke. ⟦a⟧ (λx. ⟦b⟧ k ke) ke
+      *)
       let k = create_cont_ident "" in
       abs_cont k
         (cps_eval_chain k
@@ -156,10 +168,24 @@ and cps (tm: lambda): lambda_cps =
            (continue_with (mkcont k) (cps e2)))
 
   | Lsequence (e1, e2) ->
+      (*
+         ⟦a; b⟧ = λk ke. ⟦a⟧ (λ_. ⟦b⟧ k ke) ke
+      *)
       let dummy = Ident.create "_" in
       cps (Llet (Strict, dummy, e1, e2))
 
   | Lletrec (decl, body) ->
+      (*
+         ⟦let rec
+            x₁ = a₁
+            …
+            xn = an
+          in b⟧
+         =
+         λk ke. ⟦a₁⟧ (λva₁. … ⟦an⟧ (λvan.
+                       let rec x₁ = va₁ … xn = van in ⟦b⟧ k ke)… ke)
+                     ke
+      *)
       let k = create_cont_ident "" in
       let decl_idents = List.map (fun (i, t) ->
         (i, Ident.create ("x" ^ i.Ident.name), t)) decl in
@@ -176,6 +202,9 @@ and cps (tm: lambda): lambda_cps =
          ))
 
   | Lprim (Praise _ (* ? *), [e]) ->
+      (*
+         ⟦raise e⟧ = λk ke. ⟦e⟧ ke ke
+      *)
       let k = create_cont_ident "" in
       abs_cont k
         (continue_with
@@ -183,6 +212,9 @@ and cps (tm: lambda): lambda_cps =
            (cps e))
 
   | Lprim (prim, args) ->
+      (*
+         ⟦prim a⟧ = λk ke. ⟦a⟧ (λva. k (prim va)) ke
+      *)
       let k = create_cont_ident "" in
       let args_cps = List.map cps args in
       let args_idents = List.map (fun _ -> Ident.create "v") args in
@@ -198,6 +230,9 @@ and cps (tm: lambda): lambda_cps =
            final_apply)
 
   | Ltrywith (body, exn, handle) ->
+      (*
+         ⟦try a with e -> b⟧ = λk ke. ⟦a⟧ k (λe. ⟦b⟧ k ke)
+      *)
       let k = create_cont_ident "" in
       abs_cont k
         (continue_with
@@ -207,6 +242,10 @@ and cps (tm: lambda): lambda_cps =
            (cps body))
 
   | Lstaticcatch (body, (lbl, args), handle) ->
+      (*
+         ⟦catch a with lbl, args -> b⟧ = λk ke. ⟦λargs. b⟧ (λh. ⟦a⟧ k ke) ke
+         + register (lbl → h) in [static_handlers]
+      *)
       let k = create_cont_ident "" in
       let handler = Ident.create "handler" in
       static_handlers := (lbl, handler) :: !static_handlers;
@@ -219,11 +258,20 @@ and cps (tm: lambda): lambda_cps =
            (cps (Lfunction { kind = Curried; params = args; body = handle })))
 
   | Lstaticraise (lbl, args) ->
+      (*
+         ⟦exit lbl args⟧ = ⟦h args⟧
+         when (lbl → h) is in [static_handlers]
+      *)
       let handler = List.assoc lbl !static_handlers in
       let args = if args = [] then [Lconst const_unit] else args in
       cps (Lapply (Lvar handler, args, no_apply_info))
 
   | Lifthenelse (cond, thenbody, elsebody) ->
+      (*
+         ⟦if c then a else b⟧
+         =
+         λk ke. ⟦c⟧ (λvc. (if vc then ⟦a⟧ else ⟦b⟧) k ke) ke
+      *)
       let k = create_cont_ident "" in
       let condv = Ident.create "cond" in
       let body = continue_with (mkcont k)
