@@ -96,6 +96,8 @@ end
 
 open C
 
+let static_handlers = ref []
+
 let rec cps_eval_chain
     (default_cont : cont_ident)
     (id_tms: (Ident.t * lambda_cps) list)
@@ -203,6 +205,39 @@ and cps (tm: lambda): lambda_cps =
               ~err:(Clambda (exn, continue_with (mkcont k) (cps handle)))
               k)
            (cps body))
+
+  | Lstaticcatch (body, (lbl, args), handle) ->
+      let k = create_cont_ident "" in
+      let handler = Ident.create "handler" in
+      static_handlers := (lbl, handler) :: !static_handlers;
+      let args = if args = [] then [Ident.create "_"] else args in
+      abs_cont k
+        (continue_with
+           (mkcont
+              ~std:(Clambda (handler, continue_with (mkcont k) (cps body)))
+              k)
+           (cps (Lfunction { kind = Curried; params = args; body = handle })))
+
+  | Lstaticraise (lbl, args) ->
+      let handler = List.assoc lbl !static_handlers in
+      let args = if args = [] then [Lconst const_unit] else args in
+      cps (Lapply (Lvar handler, args, no_apply_info))
+
+  | Lifthenelse (cond, thenbody, elsebody) ->
+      let k = create_cont_ident "" in
+      let condv = Ident.create "cond" in
+      let body = continue_with (mkcont k)
+          (Lifthenelse (
+             Lvar condv,
+             (cps thenbody : lambda_cps :> lambda),
+             (cps elsebody : lambda_cps :> lambda)
+           ) |> assert_cps)
+      in
+
+      abs_cont k
+        (continue_with
+           (mkcont ~std:(Clambda (condv, body)) k)
+           (cps cond))
 
   | _ -> failwith "not handled"
 
