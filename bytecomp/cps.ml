@@ -67,21 +67,27 @@ end = struct
       body = t;
     }
 
-  let continue_with (c, ce) = function
+  let continue_with (c, ce) tm =
+    match tm, c, ce with
     | Lfunction {
       kind;
       params = [k; ke];
       body = Lapply (Lvar k', [atom], _)
-    } when k = k' && is_atom atom ->
+    }, c, ce
+      when k = k' && is_atom atom ->
         begin match c with
         | Cid k ->
             Lapply (Lvar k, [atom], no_apply_info)
         | Clambda (v, vcont) ->
             subst_lambda (Ident.add v atom Ident.empty) vcont
         end
-    | Lapply (f, args, info) ->
+    | Lfunction { kind; params = [k; ke]; body }, Cid ck, Cid ce ->
+        subst_lambda
+          (Ident.empty |> Ident.add k (Lvar ck) |> Ident.add ke (Lvar ce))
+          body
+    | Lapply (f, args, info), c, ce ->
         Lapply (f, args @ [lambda_of_k c; lambda_of_k ce], info)
-    | t ->
+    | t, c, ce ->
         Lapply (t, [lambda_of_k c; lambda_of_k ce], no_apply_info)
 
   let assert_cps t =
