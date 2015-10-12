@@ -345,6 +345,55 @@ and cps (tm: lambda): lambda_cps =
            (mkcont ~std:(Clambda (tv, body)) k)
            (cps t))
 
+  | Lwhile (cond, body) ->
+    (*
+       ⟦while cond do a done⟧
+       =
+       ⟦let rec whileloop () = if cond then (body; whileloop ()) else () in whileloop ()⟧
+    *)
+    let loop = Ident.create "whileloop" in
+    let p = Ident.create "param" in
+    let loopdef = Lfunction {
+      kind = Curried;
+      params = [p];
+      body = Lifthenelse (
+        cond,
+        Lsequence (body, Lapply (Lvar loop, [Lconst const_unit], no_apply_info)),
+        Lconst const_unit
+      )
+    } in
+    cps (Lletrec ([loop, loopdef], Lapply (Lvar loop, [Lconst const_unit], no_apply_info)))
+
+  | Lfor (x, x_from, x_to, direction, body) ->
+    (*
+       ⟦for x = x_from to x_to do body done⟧
+       =
+       ⟦let rec forloop x = if x <= x_to then (body; forloop (x+1)) else () in forloop x_from⟧
+
+       (similar translation for [downto] instead of [to])
+    *)
+    let comp x y =
+      match direction with
+      | Asttypes.Upto -> Lprim (Pintcomp Cle, [x; y])
+      | Asttypes.Downto -> Lprim (Pintcomp Cge, [x; y])
+    in
+    let step x =
+      match direction with
+      | Asttypes.Upto -> Lprim (Paddint, [x; Lconst (Const_base (Asttypes.Const_int 1))])
+      | Asttypes.Downto -> Lprim (Psubint, [x; Lconst (Const_base (Asttypes.Const_int 1))])
+    in
+    let loop = Ident.create "forloop" in
+    let loopdef = Lfunction {
+      kind = Curried;
+      params = [x];
+      body = Lifthenelse (
+        comp (Lvar x) x_to,
+        Lsequence (body, Lapply (Lvar loop, [step (Lvar x)], no_apply_info)),
+        Lconst const_unit
+      )
+    } in
+    cps (Lletrec ([loop, loopdef], Lapply (Lvar loop, [x_from], no_apply_info)))
+
   | _ -> failwith "unhandled"
 
 (* let toplevel_cps tm = *)
