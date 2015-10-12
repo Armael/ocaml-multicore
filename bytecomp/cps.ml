@@ -187,9 +187,13 @@ and cps (tm: lambda): lambda_cps =
             xn = an
           in b⟧
          =
-         λk ke. ⟦a₁⟧ (λva₁. … ⟦an⟧ (λvan.
-                       let rec x₁ = va₁ … xn = van in ⟦b⟧ k ke)… ke)
-                     ke
+         λk ke.
+           let rec
+             xx₁ = ⟦a₁⟧
+             …
+             xxn = ⟦an⟧
+           in
+           xx1 (λx₁. … xxn (λxn. ⟦b⟧ k ke) ke)… ke
       *)
       let k = create_cont_ident "" in
       let decl_idents = List.map (fun (i, t) ->
