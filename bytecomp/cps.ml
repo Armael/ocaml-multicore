@@ -111,7 +111,7 @@ let rec cps_eval_chain
 
 and cps (tm: lambda): lambda_cps =
   match tm with
-  | _ when is_atom tm ->
+  | Lvar _ | Lconst _ -> (* is_atom tm *)
       (*
          ⟦a⟧ = λk ke. k a
       *)
@@ -394,7 +394,42 @@ and cps (tm: lambda): lambda_cps =
     } in
     cps (Lletrec ([loop, loopdef], Lapply (Lvar loop, [x_from], no_apply_info)))
 
-  | _ -> failwith "unhandled"
+  | Lassign (_, _) ->
+    failwith "unhandled"
+
+  | Lsend (kind, obj, meth, args, loc) ->
+    let k = create_cont_ident "" in
+    let objid = Ident.create "vo" in
+    let methid = Ident.create "vm" in
+    let args_id = List.map (fun _ -> Ident.create "v") args in
+    let args_cps = List.map cps args in
+    let final_apply =
+      Lapply (
+        Lvar (std k),
+        [Lsend (kind, Lvar objid, Lvar methid, List.map (fun i -> Lvar i) args_id, loc)],
+        no_apply_info
+      )
+    in
+    abs_cont k
+      (cps_eval_chain k
+         (List.combine (objid :: methid :: args_id) ((cps obj) :: (cps meth) :: args_cps))
+         final_apply)
+
+  | Levent (tm, ev) ->
+    let k = create_cont_ident "" in
+    let tmid = Ident.create "v" in
+    abs_cont k
+      (continue_with
+         (mkcont ~std:(Clambda (tmid, Levent (Lvar tmid, ev))) k)
+         (cps tm))
+
+  | Lifused (id, tm) ->
+    let k = create_cont_ident "" in
+    let tmid = Ident.create "v" in
+    abs_cont k
+      (continue_with
+         (mkcont ~std:(Clambda (tmid, Lifused (id, Lvar tmid))) k)
+         (cps tm))
 
 (* let toplevel_cps tm = *)
 (*   let x = Ident.create "x" in *)
