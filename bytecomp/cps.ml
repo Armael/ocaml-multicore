@@ -431,21 +431,10 @@ and cps (tm: lambda): lambda_cps =
          (mkcont ~std:(Clambda (tmid, Lifused (id, Lvar tmid))) k)
          (cps tm))
 
-(* let toplevel_cps tm = *)
-(*   let x = Ident.create "x" in *)
-(*   let identity = Lfunction { kind = Curried; params = [x]; body = Lvar x } in *)
-
-(*   match tm with *)
-(*   | Lprim (Psetglobal ident, [body]) -> *)
-(*       Lprim (Psetglobal ident, [ *)
-(*         Lapply (cps body, [identity], no_apply_info) *)
-(*       ]) *)
-(*   | _ -> assert false *)
-
-let cps tm =
+let cps (tm: lambda): lambda =
   ((cps tm) :> lambda)
 
-let toplevel_cps tm =
+let toplevel_cps (tm: lambda): lambda =
   (* TODO: proper uncaught exception handler *)
   let x = Ident.create "x" in
   let identity = Lfunction { kind = Curried; params = [x]; body = Lvar x } in
