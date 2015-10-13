@@ -379,8 +379,8 @@ and cps (tm: lambda): lambda_cps =
     in
     let step x =
       match direction with
-      | Asttypes.Upto -> Lprim (Paddint, [x; Lconst (Const_base (Asttypes.Const_int 1))])
-      | Asttypes.Downto -> Lprim (Psubint, [x; Lconst (Const_base (Asttypes.Const_int 1))])
+      | Asttypes.Upto -> Lprim (Poffsetint 1, [x])
+      | Asttypes.Downto -> Lprim (Poffsetint (-1), [x])
     in
     let loop = Ident.create "forloop" in
     let loopdef = Lfunction {
