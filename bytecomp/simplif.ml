@@ -295,6 +295,8 @@ let simplify_lets lam =
   (* Disable optimisations for bytecode compilation with -g flag *)
   let optimize = !Clflags.native_code || not !Clflags.debug in
 
+  let do_elim_refs = not !Clflags.cps in
+
   (* First pass: count the occurrences of all let-bound identifiers *)
 
   let occ = (Hashtbl.create 83: (Ident.t, int ref) Hashtbl.t) in
@@ -446,7 +448,8 @@ let simplify_lets lam =
       let slinit = simplif linit in
       let slbody = simplif lbody in
       begin try
-       mklet (Variable, v, slinit, eliminate_ref v slbody)
+        if not do_elim_refs then raise Real_reference;
+        mklet (Variable, v, slinit, eliminate_ref v slbody)
       with Real_reference ->
         mklet(Strict, v, Lprim(Pmakeblock(0, Mutable), [slinit]), slbody)
       end

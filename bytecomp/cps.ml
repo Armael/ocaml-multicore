@@ -159,14 +159,10 @@ and cps (tm: lambda): lambda_cps =
   | Llet (kind, ident, e1, e2) ->
       (*
          ⟦let x = a in b⟧ = λk ke. ⟦a⟧ (λx. ⟦b⟧ k ke) ke
-
-         if kind = Variable, [a] is compiled to (?) FIXME
       *)
       let k = create_cont_ident "" in
-      let e1 =
-        match kind with
-        | Variable -> failwith "unhandled"
-        | _ -> e1 in
+      (* Let-bound references elimination is disabled. *)
+      assert (kind <> Variable);
       abs_cont k
         (cps_eval_chain k
            [(ident, cps e1)]
@@ -394,8 +390,9 @@ and cps (tm: lambda): lambda_cps =
     } in
     cps (Lletrec ([loop, loopdef], Lapply (Lvar loop, [x_from], no_apply_info)))
 
-  | Lassign (_, _) ->
-    failwith "unhandled"
+  | Lassign (r, a) ->
+    (* Let-bound references elimination is disabled. *)
+    assert false
 
   | Lsend (kind, obj, meth, args, loc) ->
     let k = create_cont_ident "" in
