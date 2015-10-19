@@ -182,16 +182,16 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
          ⟦let rec
             x₁ = a₁
             …
-            xn = an
+            xn = aₙ
           in b⟧
          =
          λk ke.
            let rec
              xx₁ = ⟦a₁⟧[x₁ ← xx₁, xₙ ← xxₙ]
              …
-             xxn = ⟦an⟧[x₁ ← xx₁, xₙ ← xxₙ]
+             xxₙ = ⟦aₙ⟧[x₁ ← xx₁, xₙ ← xxₙ]
            in
-           xx1 (λx₁. … xxn (λxn. ⟦b⟧ k ke) ke)… ke
+           xx₁ (λx₁. … xxₙ (λxₙ. ⟦b⟧ k ke) ke)… ke
       *)
       if not (List.for_all (function (_, Lfunction _) -> true | _ -> false)
                 decl) then
@@ -319,9 +319,9 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
                   sw_blocks;
                   sw_failaction }) ->
       (*
-         ⟦switch a case c₁ -> b₁ | … | cn -> bn⟧
+         ⟦switch a case c₁ -> b₁ | … | cₙ -> bₙ⟧
          =
-         λk ke. ⟦a⟧ (λva. (switch va case c₁ -> ⟦b₁⟧ | … | cn -> ⟦bn⟧) k ke) ke
+         λk ke. ⟦a⟧ (λva. (switch va case c₁ -> ⟦b₁⟧ | … | cₙ -> ⟦bₙ⟧) k ke) ke
       *)
       let k = create_cont_ident "" in
       let tv = Ident.create "v" in
@@ -366,7 +366,12 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
     (*
        ⟦while cond do a done⟧
        =
-       ⟦let rec whileloop () = if cond then (body; whileloop ()) else () in whileloop ()⟧
+       ⟦let rec whileloop () =
+          if cond then
+            (body; whileloop ())
+          else
+            ()
+        in whileloop ()⟧
     *)
     let loop = Ident.create "whileloop" in
     let p = Ident.create "param" in
@@ -388,7 +393,12 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
     (*
        ⟦for x = x_from to x_to do body done⟧
        =
-       ⟦let rec forloop x = if x <= x_to then (body; forloop (x+1)) else () in forloop x_from⟧
+       ⟦let rec forloop x =
+          if x <= x_to then
+            (body; forloop (x+1))
+          else
+            ()
+        in forloop x_from⟧
 
        (similar translation for [downto] instead of [to])
     *)
@@ -430,7 +440,10 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
     let final_apply =
       Lapply (
         Lvar (std k),
-        [Lsend (kind, Lvar objid, Lvar methid, List.map (fun i -> Lvar i) args_id, loc)],
+        [Lsend (kind,
+                Lvar objid,
+                Lvar methid,
+                List.map (fun i -> Lvar i) args_id, loc)],
         no_apply_info
       )
     in
