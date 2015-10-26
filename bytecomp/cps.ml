@@ -124,6 +124,11 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       (*
          ⟦a b⟧ = λk ke. ⟦a⟧ (λva. ⟦b⟧ (λvb. va vb k ke) ke) ke
       *)
+      (* (observable) order of evaluation of f a1 ... an:
+         an, ..., a1, f
+
+         --> cps_eval_chain ~rev:true
+      *)
       let k = create_cont_ident "" in
       let fv = Ident.create "f" in
       let args_cps = List.map cps' args in
@@ -163,7 +168,9 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
          ⟦let x = a in b⟧ = λk ke. ⟦a⟧ (λx. ⟦b⟧ k ke) ke
       *)
       let k = create_cont_ident "" in
-      (* Let-bound references elimination is disabled. *)
+      (* Let-bound references elimination is disabled. 
+         See the comment for Lassign for more details.
+      *)
       assert (kind <> Variable);
       abs_cont k
         (cps_eval_chain k
@@ -192,6 +199,41 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
              xxₙ = ⟦aₙ⟧[x₁ ← xx₁, xₙ ← xxₙ]
            in
            xx₁ (λx₁. … xxₙ (λxₙ. ⟦b⟧ k ke) ke)… ke
+      *)
+      (* Subtlety: the CPS translation of a1…an must take into account
+         that xx1…xxn are already in cps form, and do not translate
+         them as standard variables.  (thus the custom [already_cps]
+         argument for [cps))
+
+         XXX:
+         This translation is only correct for the case of mutually
+         recursive functions.
+
+         Indeed, recursive definitions are translated to recursive
+         definitions in CPS form. In the definition body of these
+         definitions, the values themselves are used (as the
+         definition are recursive): if evaluating the CPS term perform
+         effects, these will be performed recursively.
+
+         This does not match the semantics for recursive definitions
+         of values. For example, 
+
+         [let rec l = print_int 3; () :: l in ()]
+
+         prints 3 once, then binds l to a value (that has a cycle).
+
+         With the CPS translation presented earlier, this would be
+         translated to a definition that loops, printing 3 an infinite
+         number of times: l being translated to a CPS term, getting
+         [() :: l] is translated to evaluating the [l] cps term, then
+         consing the result after a [()]; which triggers the
+         [print_int] and loops forever.
+
+         
+         An idea to handle the "recursive value" case would be to
+         first extract all the side computations (such as [print_int
+         3]), run them, and then compute the recursive value as usual,
+         without trying to CPS its definition.
       *)
       if not (List.for_all (function (_, Lfunction _) -> true | _ -> false)
                 decl) then
@@ -240,6 +282,10 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
   | Lprim (prim, args) ->
       (*
          ⟦prim a⟧ = λk ke. ⟦a⟧ (λva. k (prim va)) ke
+
+        A primitive call behave as a function, except that we do not
+        have to evaluate the function term: once its arguments have
+        been evaluated, we can directly call the primitive.
       *)
       let k = create_cont_ident "" in
       let args_cps = List.map cps' args in
@@ -258,6 +304,8 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
   | Ltrywith (body, exn, handle) ->
       (*
          ⟦try a with e -> b⟧ = λk ke. ⟦a⟧ k (λe. ⟦b⟧ k ke)
+
+        (where [e] is a free variable in [b])
       *)
       let k = create_cont_ident "" in
       abs_cont k
@@ -271,6 +319,14 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       (*
          ⟦catch a with lbl, args -> b⟧ = λk ke. ⟦λargs. b⟧ (λh. ⟦a⟧ k ke) ke
          + register (lbl → h) in [static_handlers]
+
+        Translate the handler [λargs. b], and bind it to a fresh [h]
+        in the body [a]. We also register the association (lbl → h) to
+        the [static_handlers] table.
+
+        As this is _static_ exceptions, whenever we translate [a] and
+        encounter a [Lstaticraise (lbl, _)], we know we can handle it
+        using [h].
       *)
       let k = create_cont_ident "" in
       let handler = Ident.create "handler" in
@@ -287,6 +343,11 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       (*
          ⟦exit lbl args⟧ = ⟦h args⟧
          when (lbl → h) is in [static_handlers]
+
+        As detailed for Lstaticcatch, as the code should be well
+        scoped, a handler identifier should be registered in
+        [static_handlers] for label [lbl]. We retrieve it and call it
+        with the arguments of exit.
       *)
       let handler = List.assoc lbl !static_handlers in
       let args = if args = [] then [Lconst const_unit] else args in
@@ -297,6 +358,11 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
          ⟦if c then a else b⟧
          =
          λk ke. ⟦c⟧ (λvc. (if vc then ⟦a⟧ else ⟦b⟧) k ke) ke
+
+        In [if c then a else b], [a]/[b] are only evaluated if [c]
+        evaluates to [true]/[false]. Thus, in the translation, we
+        select the right CPS translated [a]/[b] using if…then…else
+        _before_ applying it to the continuations.
       *)
       let k = create_cont_ident "" in
       let condv = Ident.create "cond" in
@@ -322,6 +388,10 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
          ⟦switch a case c₁ -> b₁ | … | cₙ -> bₙ⟧
          =
          λk ke. ⟦a⟧ (λva. (switch va case c₁ -> ⟦b₁⟧ | … | cₙ -> ⟦bₙ⟧) k ke) ke
+
+        In the same spirit as if…then…else, CPS-translate the cases, select
+        the right one using a switch…case on the evaluated body, then continue
+        with the continuation.
       *)
       let k = create_cont_ident "" in
       let tv = Ident.create "v" in
@@ -372,6 +442,9 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
           else
             ()
         in whileloop ()⟧
+
+      Just translate the while loop to an equivalent recursive
+      function, then CPS-translate this function.
     *)
     let loop = Ident.create "whileloop" in
     let p = Ident.create "param" in
@@ -400,7 +473,9 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
             ()
         in forloop x_from⟧
 
-       (similar translation for [downto] instead of [to])
+      (similar translation for [downto] instead of [to])
+      Translate the for loop to an equivalent recursive function, then
+      CPS-translate it.
     *)
     let comp x y =
       match direction with
@@ -429,6 +504,22 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
 
   | Lassign (r, a) ->
     (* Let-bound references elimination is disabled. *)
+
+    (* When generating the lambda code from the surface syntax, an
+       optimization is generally performed for let-bound references
+       that do not escape: instead of being allocated to the heap,
+       they are allocated on the stack just like normal let-bound
+       variables (using a let with kind Variable), and mutated using
+       Lassign.
+
+       ([eliminate_ref] from bytecomp/simplif.ml performs this
+       optimization)
+
+       However, in the context of a CPS-translation, this optimization
+       does not make much sense, so instead of ahaving to unoptimize
+       it to standard references, we disable it when the CPS
+       translation is enabled.
+    *)
     assert false
 
   | Lsend (kind, obj, meth, args, loc) ->
