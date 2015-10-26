@@ -8,19 +8,22 @@ let is_atom tm =
 module C : sig
   type lambda_cps = private lambda
   type cont_ident
-  type cont
 
   type k =
     | Cid of Ident.t
     | Clambda of Ident.t list * lambda
 
+  type cont = k * k * k
+
   val create_cont_ident : string -> cont_ident
   val std : cont_ident -> Ident.t
   val err : cont_ident -> Ident.t
+  val eff : cont_ident -> Ident.t
 
   val mkcont :
     ?std:k ->
     ?err:k ->
+    ?eff:k ->
     cont_ident ->
     cont
 
@@ -31,7 +34,7 @@ module C : sig
 
 end = struct
   type lambda_cps = lambda
-  type cont_ident = Ident.t * Ident.t
+  type cont_ident = Ident.t * Ident.t * Ident.t
   type k =
     | Cid of Ident.t
     | Clambda of Ident.t list * lambda
@@ -41,30 +44,36 @@ end = struct
     | Clambda (is, t) ->
         Lfunction (Curried, is, t)
 
-  type cont = k * k
+  type cont = k * k * k
 
   let create_cont_ident name =
     (Ident.create (name ^ "k")),
-    (Ident.create (name ^ "ke"))
+    (Ident.create (name ^ "ke")),
+    (Ident.create (name ^ "kf"))
 
-  let std (k, ke) =
+  let std (k, ke, kf) =
     k
 
-  let err (k, ke) =
+  let err (k, ke, kf) =
     ke
 
-  let mkcont ?std ?err (k, ke) =
+  let eff (k, ke, kf) =
+    kf
+
+  let cont k ke kf = (k, ke, kf)
+    
+  let mkcont ?std ?err ?eff (k, ke, kf) =
     let mkk o k = match o with
       | None -> Cid k
       | Some k -> k in
-    (mkk std k, mkk err ke)
+    (mkk std k, mkk err ke, mkk eff kf)
 
-  let abs_cont (k, ke) t =
-    Lfunction (Curried, [k; ke], t)
+  let abs_cont (k, ke, kf) t =
+    Lfunction (Curried, [k; ke; kf], t)
 
-  let continue_with (c, ce) tm =
+  let continue_with (c, ce, cf) tm =
     match tm, c, ce, cf with
-    | Lfunction (kind, [k; ke], Lapply (Lvar k', atoms, _)), c, ce, cf
+    | Lfunction (kind, [k; ke; kf], Lapply (Lvar k', atoms, _)), c, ce, cf
       when k = k' && List.for_all is_atom atoms ->
         begin match c with
         | Cid k ->
@@ -77,14 +86,17 @@ end = struct
                 Ident.empty (List.combine vs atoms) in
             subst_lambda subst vcont
         end
-    | Lfunction (kind, [k; ke], body), Cid ck, Cid ce ->
+    | Lfunction (kind, [k; ke; kf], body), Cid ck, Cid ce, Cid cf ->
         subst_lambda
-          (Ident.empty |> Ident.add k (Lvar ck) |> Ident.add ke (Lvar ce))
+          (Ident.empty
+           |> Ident.add k (Lvar ck)
+           |> Ident.add ke (Lvar ce)
+           |> Ident.add kf (Lvar cf))
           body
-    | Lapply (f, args, loc), c, ce ->
-        Lapply (f, args @ [lambda_of_k c; lambda_of_k ce], loc)
-    | t, c, ce ->
-        Lapply (t, [lambda_of_k c; lambda_of_k ce], Location.none)
+    | Lapply (f, args, loc), c, ce, cf ->
+        Lapply (f, args @ [lambda_of_k c; lambda_of_k ce; lambda_of_k cf], loc)
+    | t, c, ce, cf ->
+        Lapply (t, [lambda_of_k c; lambda_of_k ce; lambda_of_k cf], Location.none)
 
   let assert_cps t =
     t
