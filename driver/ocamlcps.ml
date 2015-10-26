@@ -7,16 +7,16 @@ let b = Ident.create "b"
 
 let apply_prim =
   Lapply (
-    Lprim (Pfield 29, [Lvar a]),
+    Lprim (Pfloatfield 29, [Lvar a]),
     [Lvar b],
-    no_apply_info
+    Location.none
   )
 
 let prim0 =
-  Lprim (Pfield 0, [])
+  Lprim (Pfloatfield 0, [])
 
 let prim1 =
-  Lprim (Phandle, [Lvar a])
+  Lprim (Pperform, [Lvar a])
 
 let prim2 =
   Lprim (Pisint, [Lprim (Pisint, []); Lprim (Pisout, []); Lvar a])
@@ -28,17 +28,17 @@ let var =
   Lvar a
 
 let func =
-  Lfunction {
-    kind = Curried;
-    params = [x];
-    body = Lvar a
-  }
+  Lfunction (
+    Curried,
+    [x],
+    Lvar a
+  )
 
 let apply1 =
-  Lapply (Lvar f, [Lvar a], no_apply_info)
+  Lapply (Lvar f, [Lvar a], Location.none)
 
 let apply2 =
-  Lapply (Lvar f, [Lvar a; Lvar b], no_apply_info)
+  Lapply (Lvar f, [Lvar a; Lvar b], Location.none)
 
 let _ =
   List.iter (fun tm ->

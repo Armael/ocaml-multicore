@@ -39,7 +39,7 @@ end = struct
   let lambda_of_k = function
     | Cid k -> Lvar k
     | Clambda (i, t) ->
-        Lfunction { kind = Curried; params = [i]; body = t }
+        Lfunction (Curried, [i], t)
 
   type cont = k * k
 
@@ -60,34 +60,26 @@ end = struct
     (mkk std k, mkk err ke)
 
   let abs_cont (k, ke) t =
-    Lfunction {
-      kind = Curried;
-      params = [k; ke];
-      body = t;
-    }
+    Lfunction (Curried, [k; ke], t)
 
   let continue_with (c, ce) tm =
     match tm, c, ce with
-    | Lfunction {
-      kind;
-      params = [k; ke];
-      body = Lapply (Lvar k', [atom], _)
-    }, c, ce
+    | Lfunction (kind, [k; ke], Lapply (Lvar k', [atom], _)), c, ce
       when k = k' && is_atom atom ->
         begin match c with
         | Cid k ->
-            Lapply (Lvar k, [atom], no_apply_info)
+            Lapply (Lvar k, [atom], Location.none)
         | Clambda (v, vcont) ->
             subst_lambda (Ident.add v atom Ident.empty) vcont
         end
-    | Lfunction { kind; params = [k; ke]; body }, Cid ck, Cid ce ->
+    | Lfunction (kind, [k; ke], body), Cid ck, Cid ce ->
         subst_lambda
           (Ident.empty |> Ident.add k (Lvar ck) |> Ident.add ke (Lvar ce))
           body
-    | Lapply (f, args, info), c, ce ->
-        Lapply (f, args @ [lambda_of_k c; lambda_of_k ce], info)
+    | Lapply (f, args, loc), c, ce ->
+        Lapply (f, args @ [lambda_of_k c; lambda_of_k ce], loc)
     | t, c, ce ->
-        Lapply (t, [lambda_of_k c; lambda_of_k ce], no_apply_info)
+        Lapply (t, [lambda_of_k c; lambda_of_k ce], Location.none)
 
   let assert_cps t =
     t
@@ -118,9 +110,9 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
          ⟦a⟧ = λk ke. k a
       *)
       let k = create_cont_ident "" in
-      abs_cont k (Lapply (Lvar (std k), [tm], no_apply_info))
+      abs_cont k (Lapply (Lvar (std k), [tm], Location.none))
 
-  | Lapply (f, args, info) ->
+  | Lapply (f, args, loc) ->
       (*
          ⟦a b⟧ = λk ke. ⟦a⟧ (λva. ⟦b⟧ (λvb. va vb k ke) ke) ke
       *)
@@ -139,14 +131,14 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
           (assert_cps
              (Lapply (Lvar fv,
                       List.map (fun i -> Lvar i) args_idents,
-                      info)))
+                      loc)))
       in
       abs_cont k
         (cps_eval_chain k
            (List.combine (fv :: args_idents) (cps' f :: args_cps))
            final_apply)
 
-  | Lfunction { kind; params; body } ->
+  | Lfunction (kind, params, body) ->
       (*
          ⟦λx.a⟧ = λk ke. k (λx. ⟦a⟧)
       *)
@@ -155,12 +147,8 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
         let k = create_cont_ident "" in
         abs_cont k
           (Lapply (Lvar (std k),
-                   [Lfunction {
-                      kind = Curried;
-                      params = [v];
-                      body = (acc :> lambda)
-                    }],
-                   no_apply_info))
+                   [Lfunction (Curried, [v], (acc :> lambda))],
+                   Location.none))
       ) params (cps' body)
 
   | Llet (kind, ident, e1, e2) ->
@@ -294,7 +282,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
         Lapply (
           Lvar (std k),
           [Lprim (prim, List.map (fun i -> Lvar i) args_idents)],
-          no_apply_info
+          Location.none
         ) in
       abs_cont k
         (cps_eval_chain k
@@ -337,7 +325,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
            (mkcont
               ~std:(Clambda (handler, continue_with (mkcont k) (cps' body)))
               k)
-           (cps' (Lfunction { kind = Curried; params = args; body = handle })))
+           (cps' (Lfunction (Curried, args, handle))))
 
   | Lstaticraise (lbl, args) ->
       (*
@@ -351,7 +339,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       *)
       let handler = List.assoc lbl !static_handlers in
       let args = if args = [] then [Lconst const_unit] else args in
-      cps' (Lapply (Lvar handler, args, no_apply_info))
+      cps' (Lapply (Lvar handler, args, Location.none))
 
   | Lifthenelse (cond, thenbody, elsebody) ->
       (*
@@ -448,19 +436,19 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
     *)
     let loop = Ident.create "whileloop" in
     let p = Ident.create "param" in
-    let loopdef = Lfunction {
-      kind = Curried;
-      params = [p];
-      body = Lifthenelse (
+    let loopdef = Lfunction (
+      Curried,
+      [p],
+      Lifthenelse (
         cond,
-        Lsequence (body, Lapply (Lvar loop, [Lconst const_unit], no_apply_info)),
+        Lsequence (body, Lapply (Lvar loop, [Lconst const_unit], Location.none)),
         Lconst const_unit
       )
-    } in
+    ) in
     cps' (Lletrec ([loop, loopdef],
                    Lapply (Lvar loop,
                            [Lconst const_unit],
-                           no_apply_info)))
+                           Location.none)))
 
   | Lfor (x, x_from, x_to, direction, body) ->
     (*
@@ -488,19 +476,19 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       | Asttypes.Downto -> Lprim (Poffsetint (-1), [x])
     in
     let loop = Ident.create "forloop" in
-    let loopdef = Lfunction {
-      kind = Curried;
-      params = [x];
-      body = Lifthenelse (
+    let loopdef = Lfunction (
+      Curried,
+      [x],
+      Lifthenelse (
         comp (Lvar x) x_to,
-        Lsequence (body, Lapply (Lvar loop, [step (Lvar x)], no_apply_info)),
+        Lsequence (body, Lapply (Lvar loop, [step (Lvar x)], Location.none)),
         Lconst const_unit
       )
-    } in
+    ) in
     cps' (Lletrec ([loop, loopdef],
                    Lapply (Lvar loop,
                            [x_from],
-                           no_apply_info)))
+                           Location.none)))
 
   | Lassign (r, a) ->
     (* Let-bound references elimination is disabled. *)
@@ -535,7 +523,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
                 Lvar objid,
                 Lvar methid,
                 List.map (fun i -> Lvar i) args_id, loc)],
-        no_apply_info
+        Location.none
       )
     in
     abs_cont k
@@ -566,10 +554,10 @@ let cps (tm: lambda): lambda =
 let toplevel_cps (tm: lambda): lambda =
   (* TODO: proper uncaught exception handler *)
   let x = Ident.create "x" in
-  let identity = Lfunction { kind = Curried; params = [x]; body = Lvar x } in
+  let identity = Lfunction (Curried, [x], Lvar x) in
 
   Lapply (
     (cps tm :> lambda),
     [identity; identity],
-    no_apply_info
+    Location.none
   )
