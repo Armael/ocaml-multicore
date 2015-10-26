@@ -12,7 +12,7 @@ module C : sig
 
   type k =
     | Cid of Ident.t
-    | Clambda of Ident.t * lambda
+    | Clambda of Ident.t list * lambda
 
   val create_cont_ident : string -> cont_ident
   val std : cont_ident -> Ident.t
@@ -34,12 +34,12 @@ end = struct
   type cont_ident = Ident.t * Ident.t
   type k =
     | Cid of Ident.t
-    | Clambda of Ident.t * lambda
+    | Clambda of Ident.t list * lambda
 
   let lambda_of_k = function
     | Cid k -> Lvar k
-    | Clambda (i, t) ->
-        Lfunction (Curried, [i], t)
+    | Clambda (is, t) ->
+        Lfunction (Curried, is, t)
 
   type cont = k * k
 
@@ -63,14 +63,19 @@ end = struct
     Lfunction (Curried, [k; ke], t)
 
   let continue_with (c, ce) tm =
-    match tm, c, ce with
-    | Lfunction (kind, [k; ke], Lapply (Lvar k', [atom], _)), c, ce
-      when k = k' && is_atom atom ->
+    match tm, c, ce, cf with
+    | Lfunction (kind, [k; ke], Lapply (Lvar k', atoms, _)), c, ce, cf
+      when k = k' && List.for_all is_atom atoms ->
         begin match c with
         | Cid k ->
-            Lapply (Lvar k, [atom], Location.none)
-        | Clambda (v, vcont) ->
-            subst_lambda (Ident.add v atom Ident.empty) vcont
+            Lapply (Lvar k, atoms, Location.none)
+        | Clambda (vs, vcont) ->
+            if List.length vs <> List.length atoms then
+              failwith "Ill-formed CPS term";
+            let subst =
+              List.fold_left (fun tbl (v, atom) -> Ident.add v atom tbl)
+                Ident.empty (List.combine vs atoms) in
+            subst_lambda subst vcont
         end
     | Lfunction (kind, [k; ke], body), Cid ck, Cid ce ->
         subst_lambda
@@ -97,7 +102,7 @@ let cps_eval_chain
   =
   List.fold_right (fun (id, tm) acc ->
     continue_with
-      (mkcont ~std:(Clambda (id, acc)) default_cont)
+      (mkcont ~std:(Clambda ([id], acc)) default_cont)
       tm
   ) id_tms body
 
@@ -299,7 +304,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       abs_cont k
         (continue_with
            (mkcont
-              ~err:(Clambda (exn, continue_with (mkcont k) (cps' handle)))
+              ~err:(Clambda ([exn], continue_with (mkcont k) (cps' handle)))
               k)
            (cps' body))
 
@@ -323,7 +328,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       abs_cont k
         (continue_with
            (mkcont
-              ~std:(Clambda (handler, continue_with (mkcont k) (cps' body)))
+              ~std:(Clambda ([handler], continue_with (mkcont k) (cps' body)))
               k)
            (cps' (Lfunction (Curried, args, handle))))
 
@@ -364,7 +369,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
 
       abs_cont k
         (continue_with
-           (mkcont ~std:(Clambda (condv, body)) k)
+           (mkcont ~std:(Clambda ([condv], body)) k)
            (cps' cond))
 
   | Lswitch (t, { sw_numconsts;
@@ -399,7 +404,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       in
       abs_cont k
         (continue_with
-           (mkcont ~std:(Clambda (tv, body)) k)
+           (mkcont ~std:(Clambda ([tv], body)) k)
            (cps' t))
 
   | Lstringswitch (t, clauses, failaction) ->
@@ -417,7 +422,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       in
       abs_cont k
         (continue_with
-           (mkcont ~std:(Clambda (tv, body)) k)
+           (mkcont ~std:(Clambda ([tv], body)) k)
            (cps' t))
 
   | Lwhile (cond, body) ->
@@ -537,7 +542,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
     let tmid = Ident.create "v" in
     abs_cont k
       (continue_with
-         (mkcont ~std:(Clambda (tmid, Levent (Lvar tmid, ev))) k)
+         (mkcont ~std:(Clambda ([tmid], Levent (Lvar tmid, ev))) k)
          (cps' tm))
 
   | Lifused (id, tm) ->
@@ -545,7 +550,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
     let tmid = Ident.create "v" in
     abs_cont k
       (continue_with
-         (mkcont ~std:(Clambda (tmid, Lifused (id, Lvar tmid))) k)
+         (mkcont ~std:(Clambda ([tmid], Lifused (id, Lvar tmid))) k)
          (cps' tm))
 
 let cps (tm: lambda): lambda =
