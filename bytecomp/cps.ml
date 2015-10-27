@@ -288,7 +288,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       (*
          ⟦prim a⟧ = λk ke. ⟦a⟧ (λva. k (prim va)) ke
 
-        A primitive call behave as a function, except that we do not
+        A primitive call behaves as a function, except that we do not
         have to evaluate the function term: once its arguments have
         been evaluated, we can directly call the primitive.
       *)
@@ -302,7 +302,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
           Location.none
         ) in
       abs_cont k
-        (cps_eval_chain k
+        (cps_eval_chain ~rev:true k
            (List.combine args_idents args_cps)
            final_apply)
 
