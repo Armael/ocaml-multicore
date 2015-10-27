@@ -107,16 +107,17 @@ open C
 let static_handlers = ref []
 
 let cps_eval_chain
+    ?(rev = false)
     (default_cont : cont_ident)
     (id_tms: (Ident.t * lambda_cps) list)
     (body: lambda):
   lambda
   =
-  List.fold_right (fun (id, tm) acc ->
+  List.fold_left (fun acc (id, tm) ->
     continue_with
       (mkcont ~std:(Clambda ([id], acc)) default_cont)
       tm
-  ) id_tms body
+  ) body (if rev then List.rev id_tms else id_tms)
 
 let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
   let cps' = cps already_cps in
@@ -151,7 +152,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
                       loc)))
       in
       abs_cont k
-        (cps_eval_chain k
+        (cps_eval_chain ~rev:true k
            (List.combine (fv :: args_idents) (cps' f :: args_cps))
            final_apply)
 
@@ -544,7 +545,7 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       )
     in
     abs_cont k
-      (cps_eval_chain k
+      (cps_eval_chain ~rev:true k
          (List.combine (objid :: methid :: args_id)
             ((cps' obj) :: (cps' meth) :: args_cps))
          final_apply)
