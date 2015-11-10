@@ -291,6 +291,90 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
            (mkcont ~std:(Cid (err k)) k)
            (cps' e))
 
+  | Lprim (Pccall { Primitive.prim_name = "caml_bvar_take"; _ }, [tm]) ->
+    cps' tm
+
+  | Lprim (Pccall { Primitive.prim_name = "caml_bvar_create"; _ }, [tm]) ->
+    cps' tm
+
+  | Lprim (Pccall { Primitive.prim_name = "caml_alloc_stack"; _ },
+           [hv; he; hf]) ->
+    let (x, hv, exn, he, eff, keff, hf) =
+      match hv, he, hf with
+      | Lfunction (Curried, [x], hv),
+        Lfunction (Curried, [exn], he),
+        Lfunction (Curried, [eff; keff], hf) ->
+        (x, hv, exn, he, eff, keff, hf)
+      | _ ->
+        (* see transl_handler in bytecomp/translcore.ml *)
+        assert false
+    in
+
+    let k = create_cont_ident "" in
+    let f = Ident.create "f" in
+    let v = Ident.create "v" in
+
+    let identity =
+      let x = Ident.create "x" in
+      Clambda ([x], Lvar x)
+    in
+
+    let kv = Lfunction (Curried, [x],
+                        continue_with (mkcont ~std:identity k) (cps' hv)) in
+    let ke = Lfunction (Curried, [exn],
+                        continue_with (mkcont ~std:identity k) (cps' he)) in
+    let kf = Lfunction (Curried, [eff; keff],
+                        continue_with (mkcont ~std:identity k) (cps' hf)) in
+
+    let stack =
+      Lfunction (Curried, [f; v],
+                 Lapply (Lvar f, [Lvar v; kv; ke; kf], Location.none)) in
+    abs_cont k
+      (Lapply (Lvar (std k), [stack], Location.none))
+
+  | Lprim (Presume, [stack; f; v]) ->
+    let k = create_cont_ident "" in
+    let fv = Ident.create "fv" in
+    let vv = Ident.create "vv" in
+    let stackv = Ident.create "stack" in
+
+    abs_cont k
+      (cps_eval_chain ~rev:true k
+         [(stackv, cps' stack); (fv, cps' f); (vv, cps' v)]
+         (Lapply (Lvar (std k),
+                  [Lapply (Lvar stackv, [Lvar fv; Lvar vv], Location.none)],
+                  Location.none)))
+
+  | Lprim (Pperform, [e]) ->
+    let k = create_cont_ident "" in
+    let ve = Ident.create "ve" in
+    let f = Ident.create "f" in
+    let v = Ident.create "v" in
+    let stack = Lfunction (Curried, [f; v],
+                           Lapply (Lvar f,
+                                   [Lvar v;
+                                    Lvar (std k);
+                                    Lvar (err k);
+                                    Lvar (eff k)],
+                                   Location.none)) in
+    abs_cont k
+      (continue_with
+         (mkcont
+            ~std:(Clambda ([ve], Lapply (Lvar (eff k),
+                                         [Lvar ve; stack],
+                                         Location.none)))
+            k)
+         (cps' e))
+
+  | Lprim (Pdelegate, [e; s]) ->
+      let k = create_cont_ident "" in
+      let ve = Ident.create "ve" in
+      let vs = Ident.create "vs" in
+      abs_cont k
+        (cps_eval_chain ~rev:true k
+           [(ve, cps' e); (vs, cps' s)]
+           (Lapply (Lvar (C.eff k), [Lvar ve; Lvar vs], Location.none)))
+
   | Lprim (prim, args) ->
       (*
          ⟦prim a⟧ = λk ke. ⟦a⟧ (λva. k (prim va)) ke
@@ -576,12 +660,14 @@ let cps (tm: lambda): lambda =
   ((cps (fun _ -> false) tm) :> lambda)
 
 let toplevel_cps (tm: lambda): lambda =
-  (* TODO: proper uncaught exception handler *)
   let x = Ident.create "x" in
+  let s = Ident.create "s" in
   let identity = Lfunction (Curried, [x], Lvar x) in
-
+  let exnhandler = Lfunction (Curried, [x], Lprim (Praise Raise_reraise, [Lvar x])) in
+  let effhandler = Lfunction (Curried, [x; s], Lprim (Pperform, [Lvar x])) in
+  
   Lapply (
     (cps tm :> lambda),
-    [identity; identity],
+    [identity; exnhandler; effhandler],
     Location.none
   )
