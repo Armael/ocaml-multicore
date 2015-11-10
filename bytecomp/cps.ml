@@ -139,22 +139,28 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
 
          --> cps_eval_chain ~rev:true
       *)
-      let k = create_cont_ident "" in
-      let fv = Ident.create "f" in
-      let args_cps = List.map cps' args in
-      let args_idents = List.map (fun _ -> Ident.create "v") args in
-      let final_apply =
-        continue_with
-          (mkcont k)
-          (assert_cps
-             (Lapply (Lvar fv,
-                      List.map (fun i -> Lvar i) args_idents,
-                      loc)))
-      in
-      abs_cont k
-        (cps_eval_chain ~rev:true k
-           (List.combine (fv :: args_idents) (cps' f :: args_cps))
-           final_apply)
+    let k = create_cont_ident "" in
+    let fv = Ident.create "f" in
+      begin match List.rev args with
+      | [] -> cps' f
+      | arg :: args ->
+        let arg_ident = Ident.create "v" in
+        let final_apply =
+          continue_with
+            (mkcont k)
+            (assert_cps (Lapply (Lvar fv, [Lvar arg_ident], loc))) in
+        abs_cont k
+          (continue_with
+             (mkcont
+                ~std:(Clambda ([fv],
+                               continue_with
+                                 (mkcont
+                                    ~std:(Clambda ([arg_ident], final_apply))
+                                    k)
+                                 (cps' arg)))
+                k)
+             (cps' (Lapply (f, List.rev args, loc))))
+      end
 
   | Lfunction (kind, params, body) ->
       (*

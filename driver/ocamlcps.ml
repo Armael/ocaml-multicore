@@ -2,6 +2,8 @@ open Lambda
 
 let f = Ident.create "f"
 let x = Ident.create "x"
+let y = Ident.create "y"
+let v = Ident.create "v"
 let a = Ident.create "a"
 let b = Ident.create "b"
 
@@ -34,6 +36,13 @@ let func =
     Lvar a
   )
 
+let func2 =
+  Lfunction (
+    Curried,
+    [x; y],
+    Lvar a
+  )
+
 let apply1 =
   Lapply (Lvar f, [Lvar a], Location.none)
 
@@ -46,4 +55,4 @@ let _ =
     Format.printf "\n\n%!";
     Printlambda.lambda Format.std_formatter (Cps.cps tm);
     Format.printf "\n\n-------------------------\n\n%!"
-  ) [var; func; apply1; apply2; seq; prim0; prim1; prim2; apply_prim]
+  ) [var; func; func2; apply1; apply2; seq; prim0; prim1; prim2; apply_prim]
