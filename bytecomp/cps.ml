@@ -61,7 +61,7 @@ end = struct
     kf
 
   let cont k ke kf = (k, ke, kf)
-    
+
   let mkcont ?std ?err ?eff (k, ke, kf) =
     let mkk o k = match o with
       | None -> Cid k
@@ -114,10 +114,10 @@ let cps_eval_chain
   lambda
   =
   List.fold_left (fun acc (id, tm) ->
-    continue_with
-      (mkcont ~std:(Clambda ([id], acc)) default_cont)
-      tm
-  ) body (if rev then List.rev id_tms else id_tms)
+      continue_with
+        (mkcont ~std:(Clambda ([id], acc)) default_cont)
+        tm
+    ) body (if rev then List.rev id_tms else id_tms)
 
 let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
   let cps' = cps already_cps in
@@ -139,27 +139,27 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
 
          --> cps_eval_chain ~rev:true
       *)
-    let k = create_cont_ident "" in
-    let fv = Ident.create "f" in
+      let k = create_cont_ident "" in
+      let fv = Ident.create "f" in
       begin match List.rev args with
       | [] -> cps' f
       | arg :: args ->
-        let arg_ident = Ident.create "v" in
-        let final_apply =
-          continue_with
-            (mkcont k)
-            (assert_cps (Lapply (Lvar fv, [Lvar arg_ident], loc))) in
-        abs_cont k
-          (continue_with
-             (mkcont
-                ~std:(Clambda ([fv],
-                               continue_with
-                                 (mkcont
-                                    ~std:(Clambda ([arg_ident], final_apply))
-                                    k)
-                                 (cps' arg)))
-                k)
-             (cps' (Lapply (f, List.rev args, loc))))
+          let arg_ident = Ident.create "v" in
+          let final_apply =
+            continue_with
+              (mkcont k)
+              (assert_cps (Lapply (Lvar fv, [Lvar arg_ident], loc))) in
+          abs_cont k
+            (continue_with
+               (mkcont
+                  ~std:(Clambda ([fv],
+                                 continue_with
+                                   (mkcont
+                                      ~std:(Clambda ([arg_ident], final_apply))
+                                      k)
+                                   (cps' arg)))
+                  k)
+               (cps' (Lapply (f, List.rev args, loc))))
       end
 
   | Lfunction (kind, params, body) ->
@@ -168,12 +168,12 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       *)
       (* How do we handle kind = Tupled ? *)
       List.fold_right (fun v (acc: lambda_cps) ->
-        let k = create_cont_ident "" in
-        abs_cont k
-          (Lapply (Lvar (std k),
-                   [Lfunction (Curried, [v], (acc :> lambda))],
-                   Location.none))
-      ) params (cps' body)
+          let k = create_cont_ident "" in
+          abs_cont k
+            (Lapply (Lvar (std k),
+                     [Lfunction (Curried, [v], (acc :> lambda))],
+                     Location.none))
+        ) params (cps' body)
 
   | Llet (kind, ident, e1, e2) ->
       (*
@@ -241,45 +241,45 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
          consing the result after a [()]; which triggers the
          [print_int] and loops forever.
 
-         
+
          An idea to handle the "recursive value" case would be to
          first extract all the side computations (such as [print_int
          3]), run them, and then compute the recursive value as usual,
          without trying to CPS its definition.
       *)
       if not (List.for_all (function (_, Lfunction _) -> true | _ -> false)
-                decl) then
+          decl) then
         failwith "Recursive values are not handled";
 
       let k = create_cont_ident "" in
       let decl_idents = List.map (fun (i, t) ->
-        (i, Ident.create ("x" ^ i.Ident.name), t)) decl in
+          (i, Ident.create ("x" ^ i.Ident.name), t)) decl in
       let subst_i_xi = List.fold_left (fun subst (i, xi, _) ->
-        Ident.add i (Lvar xi) subst
-      ) Ident.empty decl_idents in
+          Ident.add i (Lvar xi) subst
+        ) Ident.empty decl_idents in
       let already_cps tm =
         (match tm with
-        | Lvar v ->
-          List.exists (fun (_, xi, _) -> Ident.same v xi) decl_idents
-        | _ -> false)
+         | Lvar v ->
+             List.exists (fun (_, xi, _) -> Ident.same v xi) decl_idents
+         | _ -> false)
         || already_cps tm
       in
 
       let decl_cps = List.map (fun (i, xi, t) ->
-        let cps_t =
-          subst_lambda subst_i_xi t
-          |> cps already_cps
-        in
-        (xi, (cps_t : lambda_cps :> lambda))
-      ) decl_idents in
+          let cps_t =
+            subst_lambda subst_i_xi t
+            |> cps already_cps
+          in
+          (xi, (cps_t : lambda_cps :> lambda))
+        ) decl_idents in
 
       abs_cont k
         (Lletrec (
-           decl_cps,
-           (cps_eval_chain k
-              (List.map (fun (i, xi, _) -> (i, assert_cps (Lvar xi))) decl_idents)
-              (continue_with (mkcont k) (cps' body)))
-         ))
+            decl_cps,
+            (cps_eval_chain k
+               (List.map (fun (i, xi, _) -> (i, assert_cps (Lvar xi))) decl_idents)
+               (continue_with (mkcont k) (cps' body)))
+          ))
 
   | Lprim (Praise _ (* ? *), [e]) ->
       (*
@@ -292,79 +292,79 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
            (cps' e))
 
   | Lprim (Pccall { Primitive.prim_name = "caml_bvar_take"; _ }, [tm]) ->
-    cps' tm
+      cps' tm
 
   | Lprim (Pccall { Primitive.prim_name = "caml_bvar_create"; _ }, [tm]) ->
-    cps' tm
+      cps' tm
 
   | Lprim (Pccall { Primitive.prim_name = "caml_alloc_stack"; _ },
            [hv; he; hf]) ->
-    let (x, hv, exn, he, eff, keff, hf) =
-      match hv, he, hf with
-      | Lfunction (Curried, [x], hv),
-        Lfunction (Curried, [exn], he),
-        Lfunction (Curried, [eff; keff], hf) ->
-        (x, hv, exn, he, eff, keff, hf)
-      | _ ->
-        (* see transl_handler in bytecomp/translcore.ml *)
-        assert false
-    in
+      let (x, hv, exn, he, eff, keff, hf) =
+        match hv, he, hf with
+        | Lfunction (Curried, [x], hv),
+          Lfunction (Curried, [exn], he),
+          Lfunction (Curried, [eff; keff], hf) ->
+            (x, hv, exn, he, eff, keff, hf)
+        | _ ->
+            (* see transl_handler in bytecomp/translcore.ml *)
+            assert false
+      in
 
-    let k = create_cont_ident "" in
-    let f = Ident.create "f" in
-    let v = Ident.create "v" in
+      let k = create_cont_ident "" in
+      let f = Ident.create "f" in
+      let v = Ident.create "v" in
 
-    let identity =
-      let x = Ident.create "x" in
-      Clambda ([x], Lvar x)
-    in
+      let identity =
+        let x = Ident.create "x" in
+        Clambda ([x], Lvar x)
+      in
 
-    let kv = Lfunction (Curried, [x],
-                        continue_with (mkcont ~std:identity k) (cps' hv)) in
-    let ke = Lfunction (Curried, [exn],
-                        continue_with (mkcont ~std:identity k) (cps' he)) in
-    let kf = Lfunction (Curried, [eff; keff],
-                        continue_with (mkcont ~std:identity k) (cps' hf)) in
+      let kv = Lfunction (Curried, [x],
+                          continue_with (mkcont ~std:identity k) (cps' hv)) in
+      let ke = Lfunction (Curried, [exn],
+                          continue_with (mkcont ~std:identity k) (cps' he)) in
+      let kf = Lfunction (Curried, [eff; keff],
+                          continue_with (mkcont ~std:identity k) (cps' hf)) in
 
-    let stack =
-      Lfunction (Curried, [f; v],
-                 Lapply (Lvar f, [Lvar v; kv; ke; kf], Location.none)) in
-    abs_cont k
-      (Lapply (Lvar (std k), [stack], Location.none))
+      let stack =
+        Lfunction (Curried, [f; v],
+                   Lapply (Lvar f, [Lvar v; kv; ke; kf], Location.none)) in
+      abs_cont k
+        (Lapply (Lvar (std k), [stack], Location.none))
 
   | Lprim (Presume, [stack; f; v]) ->
-    let k = create_cont_ident "" in
-    let fv = Ident.create "fv" in
-    let vv = Ident.create "vv" in
-    let stackv = Ident.create "stack" in
+      let k = create_cont_ident "" in
+      let fv = Ident.create "fv" in
+      let vv = Ident.create "vv" in
+      let stackv = Ident.create "stack" in
 
-    abs_cont k
-      (cps_eval_chain ~rev:true k
-         [(stackv, cps' stack); (fv, cps' f); (vv, cps' v)]
-         (Lapply (Lvar (std k),
-                  [Lapply (Lvar stackv, [Lvar fv; Lvar vv], Location.none)],
-                  Location.none)))
+      abs_cont k
+        (cps_eval_chain ~rev:true k
+           [(stackv, cps' stack); (fv, cps' f); (vv, cps' v)]
+           (Lapply (Lvar (std k),
+                    [Lapply (Lvar stackv, [Lvar fv; Lvar vv], Location.none)],
+                    Location.none)))
 
   | Lprim (Pperform, [e]) ->
-    let k = create_cont_ident "" in
-    let ve = Ident.create "ve" in
-    let f = Ident.create "f" in
-    let v = Ident.create "v" in
-    let stack = Lfunction (Curried, [f; v],
-                           Lapply (Lvar f,
-                                   [Lvar v;
-                                    Lvar (std k);
-                                    Lvar (err k);
-                                    Lvar (eff k)],
-                                   Location.none)) in
-    abs_cont k
-      (continue_with
-         (mkcont
-            ~std:(Clambda ([ve], Lapply (Lvar (eff k),
-                                         [Lvar ve; stack],
-                                         Location.none)))
-            k)
-         (cps' e))
+      let k = create_cont_ident "" in
+      let ve = Ident.create "ve" in
+      let f = Ident.create "f" in
+      let v = Ident.create "v" in
+      let stack = Lfunction (Curried, [f; v],
+                             Lapply (Lvar f,
+                                     [Lvar v;
+                                      Lvar (std k);
+                                      Lvar (err k);
+                                      Lvar (eff k)],
+                                     Location.none)) in
+      abs_cont k
+        (continue_with
+           (mkcont
+              ~std:(Clambda ([ve], Lapply (Lvar (eff k),
+                                           [Lvar ve; stack],
+                                           Location.none)))
+              k)
+           (cps' e))
 
   | Lprim (Pdelegate, [e; s]) ->
       let k = create_cont_ident "" in
@@ -464,10 +464,10 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       let condv = Ident.create "cond" in
       let body = continue_with (mkcont k)
           (Lifthenelse (
-             Lvar condv,
-             (cps' thenbody : lambda_cps :> lambda),
-             (cps' elsebody : lambda_cps :> lambda)
-           ) |> assert_cps)
+              Lvar condv,
+              (cps' thenbody : lambda_cps :> lambda),
+              (cps' elsebody : lambda_cps :> lambda)
+            ) |> assert_cps)
       in
 
       abs_cont k
@@ -542,21 +542,21 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       Just translate the while loop to an equivalent recursive
       function, then CPS-translate this function.
     *)
-    let loop = Ident.create "whileloop" in
-    let p = Ident.create "param" in
-    let loopdef = Lfunction (
-      Curried,
-      [p],
-      Lifthenelse (
-        cond,
-        Lsequence (body, Lapply (Lvar loop, [Lconst const_unit], Location.none)),
-        Lconst const_unit
-      )
-    ) in
-    cps' (Lletrec ([loop, loopdef],
-                   Lapply (Lvar loop,
-                           [Lconst const_unit],
-                           Location.none)))
+      let loop = Ident.create "whileloop" in
+      let p = Ident.create "param" in
+      let loopdef = Lfunction (
+          Curried,
+          [p],
+          Lifthenelse (
+            cond,
+            Lsequence (body, Lapply (Lvar loop, [Lconst const_unit], Location.none)),
+            Lconst const_unit
+          )
+        ) in
+      cps' (Lletrec ([loop, loopdef],
+                     Lapply (Lvar loop,
+                             [Lconst const_unit],
+                             Location.none)))
 
   | Lfor (x, x_from, x_to, direction, body) ->
     (*
@@ -573,88 +573,88 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       Translate the for loop to an equivalent recursive function, then
       CPS-translate it.
     *)
-    let comp x y =
-      match direction with
-      | Asttypes.Upto -> Lprim (Pintcomp Cle, [x; y])
-      | Asttypes.Downto -> Lprim (Pintcomp Cge, [x; y])
-    in
-    let step x =
-      match direction with
-      | Asttypes.Upto -> Lprim (Poffsetint 1, [x])
-      | Asttypes.Downto -> Lprim (Poffsetint (-1), [x])
-    in
-    let loop = Ident.create "forloop" in
-    let loopdef = Lfunction (
-      Curried,
-      [x],
-      Lifthenelse (
-        comp (Lvar x) x_to,
-        Lsequence (body, Lapply (Lvar loop, [step (Lvar x)], Location.none)),
-        Lconst const_unit
-      )
-    ) in
-    cps' (Lletrec ([loop, loopdef],
-                   Lapply (Lvar loop,
-                           [x_from],
-                           Location.none)))
+      let comp x y =
+        match direction with
+        | Asttypes.Upto -> Lprim (Pintcomp Cle, [x; y])
+        | Asttypes.Downto -> Lprim (Pintcomp Cge, [x; y])
+      in
+      let step x =
+        match direction with
+        | Asttypes.Upto -> Lprim (Poffsetint 1, [x])
+        | Asttypes.Downto -> Lprim (Poffsetint (-1), [x])
+      in
+      let loop = Ident.create "forloop" in
+      let loopdef = Lfunction (
+          Curried,
+          [x],
+          Lifthenelse (
+            comp (Lvar x) x_to,
+            Lsequence (body, Lapply (Lvar loop, [step (Lvar x)], Location.none)),
+            Lconst const_unit
+          )
+        ) in
+      cps' (Lletrec ([loop, loopdef],
+                     Lapply (Lvar loop,
+                             [x_from],
+                             Location.none)))
 
   | Lassign (r, a) ->
-    (* Let-bound references elimination is disabled. *)
+      (* Let-bound references elimination is disabled. *)
 
-    (* When generating the lambda code from the surface syntax, an
-       optimization is generally performed for let-bound references
-       that do not escape: instead of being allocated to the heap,
-       they are allocated on the stack just like normal let-bound
-       variables (using a let with kind Variable), and mutated using
-       Lassign.
+      (* When generating the lambda code from the surface syntax, an
+         optimization is generally performed for let-bound references
+         that do not escape: instead of being allocated to the heap,
+         they are allocated on the stack just like normal let-bound
+         variables (using a let with kind Variable), and mutated using
+         Lassign.
 
-       ([eliminate_ref] from bytecomp/simplif.ml performs this
-       optimization)
+         ([eliminate_ref] from bytecomp/simplif.ml performs this
+         optimization)
 
-       However, in the context of a CPS-translation, this optimization
-       does not make much sense, so instead of ahaving to unoptimize
-       it to standard references, we disable it when the CPS
-       translation is enabled.
-    *)
-    assert false
+         However, in the context of a CPS-translation, this optimization
+         does not make much sense, so instead of ahaving to unoptimize
+         it to standard references, we disable it when the CPS
+         translation is enabled.
+      *)
+      assert false
 
   | Lsend (kind, obj, meth, args, loc) ->
-    let k = create_cont_ident "" in
-    let objid = Ident.create "vo" in
-    let methid = Ident.create "vm" in
-    let args_id = List.map (fun _ -> Ident.create "v") args in
-    let args_cps = List.map cps' args in
-    let final_apply =
-      Lapply (
-        Lvar (std k),
-        [Lsend (kind,
-                Lvar objid,
-                Lvar methid,
-                List.map (fun i -> Lvar i) args_id, loc)],
-        Location.none
-      )
-    in
-    abs_cont k
-      (cps_eval_chain ~rev:true k
-         (List.combine (objid :: methid :: args_id)
-            ((cps' obj) :: (cps' meth) :: args_cps))
-         final_apply)
+      let k = create_cont_ident "" in
+      let objid = Ident.create "vo" in
+      let methid = Ident.create "vm" in
+      let args_id = List.map (fun _ -> Ident.create "v") args in
+      let args_cps = List.map cps' args in
+      let final_apply =
+        Lapply (
+          Lvar (std k),
+          [Lsend (kind,
+                  Lvar objid,
+                  Lvar methid,
+                  List.map (fun i -> Lvar i) args_id, loc)],
+          Location.none
+        )
+      in
+      abs_cont k
+        (cps_eval_chain ~rev:true k
+           (List.combine (objid :: methid :: args_id)
+              ((cps' obj) :: (cps' meth) :: args_cps))
+           final_apply)
 
   | Levent (tm, ev) ->
-    let k = create_cont_ident "" in
-    let tmid = Ident.create "v" in
-    abs_cont k
-      (continue_with
-         (mkcont ~std:(Clambda ([tmid], Levent (Lvar tmid, ev))) k)
-         (cps' tm))
+      let k = create_cont_ident "" in
+      let tmid = Ident.create "v" in
+      abs_cont k
+        (continue_with
+           (mkcont ~std:(Clambda ([tmid], Levent (Lvar tmid, ev))) k)
+           (cps' tm))
 
   | Lifused (id, tm) ->
-    let k = create_cont_ident "" in
-    let tmid = Ident.create "v" in
-    abs_cont k
-      (continue_with
-         (mkcont ~std:(Clambda ([tmid], Lifused (id, Lvar tmid))) k)
-         (cps' tm))
+      let k = create_cont_ident "" in
+      let tmid = Ident.create "v" in
+      abs_cont k
+        (continue_with
+           (mkcont ~std:(Clambda ([tmid], Lifused (id, Lvar tmid))) k)
+           (cps' tm))
 
 let cps (tm: lambda): lambda =
   ((cps (fun _ -> false) tm) :> lambda)
@@ -665,7 +665,7 @@ let toplevel_cps (tm: lambda): lambda =
   let identity = Lfunction (Curried, [x], Lvar x) in
   let exnhandler = Lfunction (Curried, [x], Lprim (Praise Raise_reraise, [Lvar x])) in
   let effhandler = Lfunction (Curried, [x; s], Lprim (Pperform, [Lvar x])) in
-  
+
   Lapply (
     (cps tm :> lambda),
     [identity; exnhandler; effhandler],
