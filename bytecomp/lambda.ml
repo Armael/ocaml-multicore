@@ -192,6 +192,7 @@ type lambda =
   | Lsend of meth_kind * lambda * lambda * lambda list * Location.t
   | Levent of lambda * lambda_event
   | Lifused of Ident.t * lambda
+  | Lext of int * lambda
 
 and lambda_switch =
   { sw_numconsts: int;
@@ -282,6 +283,8 @@ let make_key e =
    may include cyclic structure of type Type.typexpr *)
     | Levent _  ->
         raise Not_simple
+    | Lext (a,e) ->
+        Lext (a,tr_rec env e)
 
   and tr_recs env es = List.map (tr_rec env) es
 
@@ -366,6 +369,8 @@ let iter f = function
       f lam
   | Lifused (v, e) ->
       f e
+  | Lext (a, e) ->
+      f e
 
 
 module IdentSet =
@@ -397,7 +402,7 @@ let free_ids get l =
     | Lvar _ | Lconst _ | Lapply _
     | Lprim _ | Lswitch _ | Lstringswitch _ | Lstaticraise _
     | Lifthenelse _ | Lsequence _ | Lwhile _
-    | Lsend _ | Levent _ | Lifused _ -> ()
+    | Lsend _ | Levent _ | Lifused _ | Lext _ -> ()
   in free l; !fv
 
 let free_variables l =
@@ -439,18 +444,50 @@ let rec patch_guarded patch = function
 
 (* Translate an access path *)
 
-let rec transl_normal_path = function
-    Pident id ->
-      if Ident.global id then Lprim(Pgetglobal id, []) else Lvar id
-  | Pdot(p, s, pos) ->
-      Lprim(Pfield(pos, true, Immutable), [transl_normal_path p])
-  | Papply(p1, p2) ->
-      fatal_error "Lambda.transl_path"
+let rec is_ext_direct_style_path = function
+  | Pident id ->
+      Ident.persistent id
+      && not (List.mem (Ident.name id) !Clflags.cpsmodules)
+  | Pdot (path, _, _) -> is_ext_direct_style_path path
+  | Papply (_, _) -> fatal_error "Lambda.is_ext_path"
+
+let type_arity env ty =
+  let open Types in
+  let rec aux ty =
+    match ty.desc with
+    | Tarrow (_, t1, t2, _) -> 1 + (aux t2)
+    | _ -> 0 in
+  aux (Ctype.full_expand env ty)
+
+let transl_normal_path ?env path =
+  (* prerr_endline ("transl_normal_path " ^ (Path.name path)); *)
+  let rec lam path =
+    match path with
+      Pident id ->
+        if Ident.global id then Lprim(Pgetglobal id, []) else Lvar id
+    | Pdot(p, s, pos) ->
+        Lprim(Pfield(pos, true, Immutable), [lam p])
+    | Papply(p1, p2) ->
+        fatal_error "Lambda.transl_path" in
+  let lam = lam path in
+  if is_ext_direct_style_path path then
+    match env with
+    | Some env ->
+        begin try
+          let arity = type_arity env (Env.find_value path env).Types.val_type in
+          Lext (arity, lam)
+        with Not_found ->
+          Lext (0, lam)
+        end
+    | None ->
+        Lext (0, lam)
+  else
+    lam
 
 (* Translation of value identifiers *)
 
 let transl_path ?(loc=Location.none) env path =
-  transl_normal_path (Env.normalize_path (Some loc) env path)
+  transl_normal_path ~env (Env.normalize_path (Some loc) env path)
 
 (* Compile a sequence of expressions *)
 
@@ -496,6 +533,7 @@ let subst_lambda s lam =
       Lsend (k, subst met, subst obj, List.map subst args, loc)
   | Levent (lam, evt) -> Levent (subst lam, evt)
   | Lifused (v, e) -> Lifused (v, subst e)
+  | Lext (a, e) -> Lext (a, subst e)
   and subst_decl (id, exp) = (id, subst exp)
   and subst_case (key, case) = (key, subst case)
   and subst_strcase (key, case) = (key, subst case)

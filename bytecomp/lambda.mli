@@ -203,6 +203,7 @@ type lambda =
   | Lsend of meth_kind * lambda * lambda * lambda list * Location.t
   | Levent of lambda * lambda_event
   | Lifused of Ident.t * lambda
+  | Lext of int * lambda
 
 and lambda_switch =
   { sw_numconsts: int;                  (* Number of integer cases *)
@@ -234,7 +235,7 @@ module IdentSet: Set.S with type elt = Ident.t
 val free_variables: lambda -> IdentSet.t
 val free_methods: lambda -> IdentSet.t
 
-val transl_normal_path: Path.t -> lambda   (* Path.t is already normal *)
+val transl_normal_path: ?env:Env.t -> Path.t -> lambda   (* Path.t is already normal *)
 val transl_path: ?loc:Location.t -> Env.t -> Path.t -> lambda
 val make_sequence: ('a -> lambda) -> 'a list -> lambda
 

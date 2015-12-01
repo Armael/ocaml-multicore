@@ -137,6 +137,7 @@ module Options = Main_args.Make_bytecomp_options (struct
   let _drawlambda = set dump_rawlambda
   let _dlambda = set dump_lambda
   let _dcps = set cps
+  let _dcpsmodule s = cpsmodules := s :: !cpsmodules
   let _dinstr = set dump_instr
   let anonymous = anonymous
 end)

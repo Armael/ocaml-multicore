@@ -107,6 +107,7 @@ module Options = Main_args.Make_optcomp_options (struct
   let _drawlambda = option "-drawlambda"
   let _dlambda = option "-dlambda"
   let _dcps = option "-dcps"
+  let _dcpsmodule = option_with_arg "-dcpsmodule"
   let _dclambda = option "-dclambda"
   let _dcmm = option "-dcmm"
   let _dsel = option "-dsel"

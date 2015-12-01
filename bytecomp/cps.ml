@@ -130,6 +130,22 @@ let rec cps (already_cps: lambda -> bool) (tm: lambda): lambda_cps =
       let k = create_cont_ident "" in
       abs_cont k (Lapply (Lvar (std k), [tm], Location.none))
 
+  | Lext (arity, tm) ->
+      let rec aux params arity : lambda_cps =
+        let k = create_cont_ident "" in
+        let body =
+          match arity with
+          | 0 ->
+              if params = [] then tm
+              else Lapply (tm, List.rev params, Location.none)
+          | n ->
+              let v = Ident.create "v" in
+              let body' = (aux ((Lvar v) :: params) (n-1) : lambda_cps :> lambda) in
+              Lfunction (Curried, [v], body') in
+        abs_cont k
+          (Lapply (Lvar (std k), [body], Location.none)) in
+      aux [] arity
+
   | Lapply (f, args, loc) ->
       (*
          ⟦a b⟧ = λk ke. ⟦a⟧ (λva. ⟦b⟧ (λvb. va vb k ke) ke) ke

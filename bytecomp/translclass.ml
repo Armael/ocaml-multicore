@@ -343,7 +343,7 @@ let rec build_class_init cla cstr super inh_init cl_init msubst top cl =
       begin match cl.cl_desc, inh_init with
         Tcl_ident (path, _, _), (obj_init, path')::inh_init ->
           assert (Path.same (normalize_cl_path cl path) path');
-          let lpath = transl_normal_path path' in
+          let lpath = transl_normal_path ~env:cl.cl_env path' in
           let inh = Ident.create "inh"
           and ofs = List.length vals + 1
           and valids, methids = super in
@@ -457,7 +457,7 @@ let transl_class_rebind ids cl vf =
     if not (Translcore.check_recursive_lambda ids obj_init') then
       raise(Error(cl.cl_loc, Illegal_class_expr));
     let id = (obj_init' = lfunction [self] obj_init0) in
-    if id then transl_normal_path path else
+    if id then transl_normal_path ~env:cl.cl_env path else
 
     let cla = Ident.create "class"
     and new_init = Ident.create "new_init"
@@ -467,7 +467,7 @@ let transl_class_rebind ids cl vf =
     Llet(
     Strict, new_init, lfunction [obj_init] obj_init',
     Llet(
-    Alias, cla, transl_normal_path path,
+    Alias, cla, transl_normal_path ~env:cl.cl_env path,
     Lprim(Pmakeblock(0, Immutable),
           [mkappl(Lvar new_init, [lfield cla 0]);
            lfunction [table]
@@ -754,7 +754,7 @@ let transl_class ids cl_id pub_meths cl vflag =
   and linh_envs =
     List.map
       (fun (_, p) ->
-         Lprim(Pfield(3, true, Mutable), [transl_normal_path p]))
+         Lprim(Pfield(3, true, Mutable), [transl_normal_path ~env:cl.cl_env p]))
       (List.rev inh_init)
   in
   let make_envs lam =
@@ -773,7 +773,7 @@ let transl_class ids cl_id pub_meths cl vflag =
   let inh_keys =
     List.map
       (fun (_,p) ->
-         Lprim(Pfield(1, true, Mutable), [transl_normal_path p])) inh_paths in
+         Lprim(Pfield(1, true, Mutable), [transl_normal_path ~env:cl.cl_env p])) inh_paths in
   let lclass lam =
     Llet(Strict, class_init,
          Lfunction(Curried, [cla], def_ids cla cl_init), lam)

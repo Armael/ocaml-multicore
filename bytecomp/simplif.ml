@@ -84,6 +84,8 @@ let rec eliminate_ref id = function
       Levent(eliminate_ref id l, ev)
   | Lifused(v, e) ->
       Lifused(v, eliminate_ref id e)
+  | Lext(a, e) ->
+      Lext(a, eliminate_ref id e)
 
 (* Simplification of exits *)
 
@@ -155,6 +157,7 @@ let simplify_exits lam =
   | Lsend(k, m, o, ll, _) -> List.iter count (m::o::ll)
   | Levent(l, _) -> count l
   | Lifused(v, l) -> count l
+  | Lext(a, e) -> count e
 
   and count_default sw = match sw.sw_failaction with
   | None -> ()
@@ -273,6 +276,7 @@ let simplify_exits lam =
       Lsend(k, simplif m, simplif o, List.map simplif ll, loc)
   | Levent(l, ev) -> Levent(simplif l, ev)
   | Lifused(v, l) -> Lifused (v,simplif l)
+  | Lext(a, e) -> Lext(a, simplif e)
   in
   simplif lam
 
@@ -394,6 +398,8 @@ let simplify_lets lam =
   | Levent(l, _) -> count bv l
   | Lifused(v, l) ->
       if count_var v > 0 then count bv l
+  | Lext(a, e) ->
+      count bv e
 
   and count_default bv sw = match sw.sw_failaction with
   | None -> ()
@@ -501,6 +507,8 @@ let simplify_lets lam =
   | Levent(l, ev) -> Levent(simplif l, ev)
   | Lifused(v, l) ->
       if count_var v > 0 then simplif l else lambda_unit
+  | Lext(a, e) ->
+      Lext(a, simplif e)
   in
   simplif lam
 
@@ -582,6 +590,8 @@ let rec emit_tail_infos is_tail lambda =
       emit_tail_infos is_tail lam
   | Lifused (_, lam) ->
       emit_tail_infos is_tail lam
+  | Lext (a, e) ->
+      emit_tail_infos is_tail e
 and list_emit_tail_infos_fun f is_tail =
   List.iter (fun x -> emit_tail_infos is_tail (f x))
 and list_emit_tail_infos is_tail =

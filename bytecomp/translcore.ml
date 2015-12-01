@@ -846,17 +846,17 @@ and transl_exp0 e =
              [lambda_unit], Location.none)
   | Texp_instvar(path_self, path, _) ->
       Lprim(Parrayrefu Paddrarray,
-            [transl_normal_path path_self; transl_normal_path path])
+            [transl_normal_path ~env:e.exp_env path_self; transl_normal_path ~env:e.exp_env path])
   | Texp_setinstvar(path_self, path, _, expr) ->
-      transl_setinstvar (transl_normal_path path_self) path expr
+      transl_setinstvar e.exp_env (transl_normal_path ~env:e.exp_env path_self) path expr
   | Texp_override(path_self, modifs) ->
       let cpy = Ident.create "copy" in
       Llet(Strict, cpy,
-           Lapply(Translobj.oo_prim "copy", [transl_normal_path path_self],
+           Lapply(Translobj.oo_prim "copy", [transl_normal_path ~env:e.exp_env path_self],
                   Location.none),
            List.fold_right
              (fun (path, _, expr) rem ->
-                Lsequence(transl_setinstvar (Lvar cpy) path expr, rem))
+                Lsequence(transl_setinstvar e.exp_env (Lvar cpy) path expr, rem))
              modifs
              (Lvar cpy))
   | Texp_letmodule(id, _, modl, body) ->
@@ -1078,9 +1078,9 @@ and transl_let rec_flag pat_expr_list body =
         (id, lam) in
       Lletrec(List.map2 transl_case pat_expr_list idlist, body)
 
-and transl_setinstvar self var expr =
+and transl_setinstvar env self var expr =
   Lprim(Parraysetu (if maybe_pointer expr then Paddrarray else Pintarray),
-                    [self; transl_normal_path var; transl_exp expr])
+                    [self; transl_normal_path ~env var; transl_exp expr])
 
 and transl_record all_labels repres lbl_expr_list opt_init_expr =
   let size = Array.length all_labels in

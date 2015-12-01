@@ -105,6 +105,7 @@ module Options = Main_args.Make_bytecomp_options (struct
   let _drawlambda = option "-drawlambda"
   let _dlambda = option "-dlambda"
   let _dcps = option "-dcps"
+  let _dcpsmodule = option_with_arg "-dcpsmodule"
   let _dinstr = option "-dinstr"
   let anonymous = process_file
 end);;
